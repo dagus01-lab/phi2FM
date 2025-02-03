@@ -68,7 +68,7 @@ class FoundationEncoder(nn.Module):
                   except for i == 0, which is input_dim -> dims[0].
         """
         super().__init__()
-        assert len(depths) == len(dims), "depths and dims must have the same length."
+        assert len(depths) == len(dims), f"depths and dims must have the same length. dims={dims}, depths={depths}"
 
         self.stages = nn.ModuleList()
         prev_ch = input_dim
@@ -158,7 +158,7 @@ class FoundationDecoder(nn.Module):
             dims: e.g. [64, 128, 256, 512] if used in reverse for building blocks.
         """
         super().__init__()
-        assert len(depths) == len(dims), "depths and dims must have the same length."
+        assert len(depths) == len(dims), f"depths and dims must have the same length. dims={dims}, depths={depths}"
 
         self.stages = nn.ModuleList()
         # We'll build them in reverse to match the skip connections
@@ -217,6 +217,7 @@ class phisat2net_geoaware(nn.Module):
           - reconstruction
         """
         super().__init__()
+        print(f"input_dim: {input_dim}")
 
         # Basic model parameters
         self.input_dim = input_dim
@@ -264,7 +265,7 @@ class phisat2net_geoaware(nn.Module):
         self.encoder = FoundationEncoder(
             input_dim=self.dims[0],
             depths=self.depths,
-            dims=self.dims[1:],  # we already consumed dims[0] in the stem
+            dims=self.dims,  # we already consumed dims[0] in the stem
             norm="batch",
             activation=activation,
             padding="same",
@@ -290,13 +291,12 @@ class phisat2net_geoaware(nn.Module):
         if self.fixed_task != 'coords':
             # We decode from dims[-1] -> dims[-2] -> ... -> dims[0]
             # The FoundationDecoder expects the same # of depths as dims it receives.
-            rev_dims = self.dims[1:]  # same dims we gave to the encoder
             # Note: reversed(rev_dims) will go from highest to lowest
             # but the FoundationDecoder build logic also does reversed() internally.
             # So we pass them in the forward order, but it constructs them in reverse.
             self.decoder = FoundationDecoder(
                 depths=self.depths,
-                dims=rev_dims,
+                dims=self.dims,
                 norm="batch",
                 activation=activation,
                 padding="same",
@@ -333,7 +333,7 @@ class phisat2net_geoaware(nn.Module):
             # so we do a global pooling => FC => 31 
             self.head_seg = nn.Sequential(
                 nn.Linear(self.dims[-1] * 2, 128),
-                activation,
+                get_activation(activation),
                 *( [nn.Dropout(p=self.climate_dropout)] if self.climate_dropout > 0 else [] ),
                 nn.Linear(128, 31),
             )
@@ -346,7 +346,7 @@ class phisat2net_geoaware(nn.Module):
         if self.fixed_task is None or self.fixed_task == "coords":
             self.head_geo = nn.Sequential(
                 nn.Linear(self.dims[-1] * 2, 128),
-                activation,
+                get_activation(activation),
                 *( [nn.Dropout(p=self.geo_dropout)] if self.geo_dropout > 0 else [] ),
                 nn.Linear(128, 4),
                 nn.Tanh()

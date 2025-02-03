@@ -415,6 +415,7 @@ def get_phisat2_model(
                                        dims=dims,
                                        dropout=True,
                                        fixed_task=fixed_task,
+                                       **kwargs
                                        )
         
         

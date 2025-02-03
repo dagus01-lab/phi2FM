@@ -6,6 +6,9 @@ from utils.training_utils import get_activation, get_normalization, SE_Block
 class CoreCNNBlock(nn.Module):
     def __init__(self, in_channels, out_channels, *, norm="batch", activation="relu", padding="same", residual=True):
         super(CoreCNNBlock, self).__init__()
+        
+        assert in_channels > 0, f"Got in_channels={in_channels}"
+        assert out_channels > 0, f"Got out_channels={out_channels}"
 
         self.activation = get_activation(activation)
         self.residual = residual
@@ -29,7 +32,7 @@ class CoreCNNBlock(nn.Module):
         
         self.conv3 = nn.Conv2d(self.out_channels, self.out_channels, 3, padding=self.padding, groups=1)
         self.norm3 = get_normalization(norm, self.out_channels)
-
+        
 
     def forward(self, x):
         identity = x
@@ -57,6 +60,9 @@ class CoreAttentionBlock(nn.Module):
         padding="same",
     ):
         super(CoreAttentionBlock, self).__init__()
+
+        assert lower_channels > 0, f"Got lower_channels={lower_channels}"
+        assert higher_channels > 0, f"Got higher_channels={higher_channels}"
 
         self.lower_channels = lower_channels
         self.higher_channels = higher_channels
