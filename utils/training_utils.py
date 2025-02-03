@@ -1,184 +1,13 @@
-import math
+import os
+import yaml
+import multiprocessing
+
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import buteo as beo
+import torch.distributed as dist
 
 
-class TiledMSE(nn.Module):
-    """
-    Calculates the MSE at full image level and at the pixel level and weights the two.
-    result = (sum_mse * (1 - bias)) + (mse * bias)
-    """
-    def __init__(self, bias=0.8, scale_term=1.0):
-        super(TiledMSE, self).__init__()
-        self.bias = bias
-        self.scale_term = scale_term
-
-    def forward(self, y_pred, y_true):
-        y_true = (y_true + 1) * self.scale_term
-        y_pred = (y_pred + 1) * self.scale_term
-
-        y_pred_sum = torch.sum(y_pred, dim=(2, 3)) / (y_pred.shape[1] * y_pred.shape[2] * y_pred.shape[3])
-        y_true_sum = torch.sum(y_true, dim=(2, 3)) / (y_true.shape[1] * y_true.shape[2] * y_true.shape[3])
-
-        sum_mse = torch.mean((y_pred_sum - y_true_sum) ** 2, dim=1).mean()
-        mse = torch.mean((y_pred - y_true) ** 2, dim=1).mean()
-
-        weighted = (sum_mse * (1 - self.bias)) + (mse * self.bias)
-        
-        return weighted 
-
-
-class TiledMAPE(nn.Module):
-    """
-    Calculates the MSE at full image level and at the pixel level and weights the two.
-    result = (sum_mse * (1 - bias)) + (mse * bias)
-    """
-    def __init__(self, beta=0.1, bias=0.8):
-        super(TiledMAPE, self).__init__()
-        self.beta = beta
-        self.bias = bias
-        self.eps = 1e-6
-
-    def forward(self, y_pred, y_true):
-        y_pred_sum = torch.sum(y_pred, dim=(2, 3)) / (y_pred.shape[1] * y_pred.shape[2] * y_pred.shape[3])
-        y_true_sum = torch.sum(y_true, dim=(2, 3)) / (y_true.shape[1] * y_true.shape[2] * y_true.shape[3])
-
-        mape_sum = torch.mean(torch.abs((y_true_sum - y_pred_sum) / (y_true_sum + self.eps + self.beta)), dim=1).mean()
-        mape = torch.mean(torch.abs((y_true - y_pred) / (y_true + self.eps + self.beta)), dim=1).mean()
-
-        weighted = (mape_sum * (1 - self.bias)) + (mape * self.bias)
-        
-        return weighted 
-
-
-class TiledMAPE2(nn.Module):
-    """
-    Calculates the MSE at full image level and at the pixel level and weights the two.
-    result = (sum_mse * (1 - bias)) + (mse * bias)
-    """
-    def __init__(self, beta=0.1, bias=0.8):
-        super(TiledMAPE2, self).__init__()
-        self.beta = beta
-        self.bias = bias
-        self.eps = 1e-6
-
-    def forward(self, y_pred, y_true):
-        eps = torch.Tensor([self.eps]).to(y_pred.device)
-        y_true_sum = torch.sum(y_true, dim=(2, 3)) / (y_true.shape[1] * y_true.shape[2] * y_true.shape[3])
-
-        abs_diff = torch.abs(y_true - y_pred)
-        abs_diff_sum = torch.sum(abs_diff, dim=(2, 3)) / (y_pred.shape[1] * y_pred.shape[2] * y_pred.shape[3])
-
-        wape = torch.mean(abs_diff_sum / torch.maximum(y_true_sum + self.beta, eps), dim=1).mean()
-        mape = torch.mean(abs_diff / torch.maximum(y_true + self.beta, eps), dim=1).mean()
-
-        weighted = (wape * (1 - self.bias)) + (mape * self.bias)
-        
-        return weighted 
-
-
-def drop_path(x, keep_prob = 1.0, inplace = False):
-    mask_shape = (x.shape[0],) + (1,) * (x.ndim - 1) 
-    mask = x.new_empty(mask_shape).bernoulli_(keep_prob)
-    mask.div_(keep_prob)
-
-    if inplace:
-        x.mul_(mask)
-    else:
-        x = x * mask
-
-    return x
-
-
-class DropPath(nn.Module):
-    def __init__(self, p = 0.5, inplace = False):
-        super().__init__()
-        self.p = p
-        self.inplace = inplace
-
-    def forward(self, x):
-        if self.training and self.p > 0:
-            x = drop_path(x, self.p, self.inplace)
-        return x
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(p={self.p})"
-
-
-class LayerNorm(nn.Module):
-    """ LayerNorm that supports two data formats: channels_last (default) or channels_first. 
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with 
-    shape (batch_size, height, width, channels) while channels_first corresponds to inputs 
-    with shape (batch_size, channels, height, width).
-    """
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError 
-
-        self.normalized_shape = (normalized_shape, )
-    
-    def forward(self, x):
-        if self.data_format == "channels_last":
-            return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-
-        elif self.data_format == "channels_first":
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-
-            return x
-
-class GRN(nn.Module):
-    """ GRN (Global Response Normalization) layer """
-    def __init__(self, dim, channel_first=False):
-        super().__init__()
-        self.channel_first = channel_first
-        if self.channel_first:
-            self.gamma = nn.Parameter(torch.zeros(1, dim, 1, 1))
-            self.beta = nn.Parameter(torch.zeros(1, dim, 1, 1))
-        else:
-            self.gamma = nn.Parameter(torch.zeros(1, 1, 1, dim))
-            self.beta = nn.Parameter(torch.zeros(1, 1, 1, dim))
-
-    def forward(self, x):
-        if self.channel_first:
-            Gx = torch.norm(x, p=2, dim=(2, 3), keepdim=True)
-            Nx = Gx / (Gx.mean(dim=1, keepdim=True) + 1e-6)
-        else:
-            Gx = torch.norm(x, p=2, dim=(1, 2), keepdim=True)
-            Nx = Gx / (Gx.mean(dim=-1, keepdim=True) + 1e-6)
-
-        return self.gamma * (x * Nx) + self.beta + x
-
-
-def cosine_scheduler(base_value, final_value, epochs, warmup_epochs=0,
-                     start_warmup_value=0, warmup_steps=-1):
-    warmup_schedule = np.array([])
-    warmup_iters = warmup_epochs
-    if warmup_steps > 0:
-        warmup_iters = warmup_steps
-    # print("Set warmup steps = %d" % warmup_iters)
-    if warmup_epochs > 0:
-        warmup_schedule = np.linspace(start_warmup_value, base_value, warmup_iters)
-
-    iters = np.arange(epochs - warmup_iters)
-    schedule = np.array(
-        [final_value + 0.5 * (base_value - final_value) * (1 + math.cos(math.pi * i / (len(iters)))) for i in iters])
-
-    schedule = np.concatenate((warmup_schedule, schedule))
-
-    assert len(schedule) == epochs
-
-    return schedule
 
 
 class SE_Block(nn.Module):
@@ -200,84 +29,6 @@ class SE_Block(nn.Module):
         y = self.excitation(y).view(bs, c, 1, 1)
 
         return x * y.expand_as(x)
-
-
-class SE_BlockV2(nn.Module):
-    # The is a custom implementation of the ideas presented in the paper:
-    # https://www.sciencedirect.com/science/article/abs/pii/S0031320321003460
-    def __init__(self, channels, reduction=16, activation="relu"):
-        super(SE_BlockV2, self).__init__()
-
-        self.channels = channels
-        self.reduction = reduction
-        self.activation = get_activation(activation)
-   
-        self.fc_spatial = nn.Sequential(
-            nn.AdaptiveAvgPool2d(8),
-            nn.Conv2d(channels, channels, kernel_size=2, stride=2, groups=channels, bias=False),
-            nn.BatchNorm2d(channels),
-        )
-
-        self.fc_reduction = nn.Linear(in_features=channels * (4 * 4), out_features=channels // self.reduction)
-        self.fc_extention = nn.Linear(in_features=channels // self.reduction , out_features=channels)
-        self.sigmoid = nn.Sigmoid()
-
-
-    def forward(self, x):
-        identity = x
-        x = self.fc_spatial(identity)
-        x = self.activation(x)
-        x = x.reshape(x.size(0), -1)
-        x = self.fc_reduction(x)
-        x = self.activation(x)
-        x = self.fc_extention(x)
-        x = self.sigmoid(x)
-        x = x.reshape(x.size(0), x.size(1), 1, 1)
-
-        return x
-
-
-class SE_BlockV3(nn.Module):
-    """ Squeeze and Excitation block with spatial and channel attention. """
-    def __init__(self, channels, reduction_c=2, reduction_s=8, activation="relu", norm="batch", first_layer=False):
-        super(SE_BlockV3, self).__init__()
-
-        self.channels = channels
-        self.first_layer = first_layer
-        self.reduction_c = reduction_c if not first_layer else 1
-        self.reduction_s = reduction_s
-        self.activation = get_activation(activation)
-   
-        self.fc_pool = nn.AdaptiveAvgPool2d(reduction_s)
-        self.fc_conv = nn.Conv2d(self.channels, self.channels, kernel_size=2, stride=2, groups=self.channels, bias=False)
-        self.fc_norm = get_normalization(norm, self.channels)
-
-        self.linear1 = nn.Linear(in_features=self.channels * (reduction_s // 2 * reduction_s // 2), out_features=self.channels // self.reduction_c)
-        self.linear2 = nn.Linear(in_features=self.channels // self.reduction_c, out_features=self.channels)
-
-        self.activation_output = nn.Softmax(dim=1) if first_layer else nn.Sigmoid()
-
-
-    def forward(self, x):
-        identity = x
-
-        x = self.fc_pool(x)
-        x = self.fc_conv(x)
-        x = self.fc_norm(x)
-        x = self.activation(x)
-        x = x.reshape(x.size(0), -1)
-        x = self.linear1(x)
-        x = self.activation(x)
-        x = self.linear2(x)
-
-        if self.first_layer:
-            x = self.activation_output(x) * x.size(1)
-        else:
-            x = self.activation_output(x)
-            
-        x = identity * x.reshape(x.size(0), x.size(1), 1, 1)
-
-        return x
 
 
 def get_activation(activation_name):
@@ -366,20 +117,6 @@ def get_normalization(normalization_name, num_channels, num_groups=32, dims=2):
         raise ValueError(f"normalization must be one of batch, instance, layer, group, none. Got: {normalization_name}")
 
 
-def convert_torch_to_float(tensor):
-    if torch.is_tensor(tensor):
-        return float(tensor.detach().cpu().numpy().astype(np.float32))
-    elif isinstance(tensor, np.ndarray) and tensor.size == 1:
-        return float(tensor.astype(np.float32))
-    elif isinstance(tensor, float):
-        return tensor
-    elif isinstance(tensor, int):
-        return float(tensor)
-    else:
-        raise ValueError("Cannot convert tensor to float")
-
-
-import yaml
 class AttrDict(dict):
 
     def __init__(self, *args, **kwargs):
@@ -397,60 +134,214 @@ def read_yaml(path):
 
     return AttrDict(params)
 
-from typing import Union, List, Tuple, Optional
 
 
 
-class MultiArray_1D(beo.MultiArray):
-    def __init__(self,
-        array_list: List[Union[np.ndarray, np.memmap]],
-        shuffle: bool = False,
-        random_sampling: bool = False,
-        seed: int = 42,
-        _idx_start: Optional[int] = None,
-        _idx_end: Optional[int] = None,
-        _is_subarray: bool = False
-    ):
-        self.array_list = array_list
-        self.is_subarray = _is_subarray
+
+
+def module_memory_usage(model, part=None, min_size=0):
+    """
+    Prints the memory usage of each module in the model or a specified part of the model.
+    Additionally, when a part is specified, it prints the total memory usage of that part.
+
+    Args:
+        model (nn.Module): The PyTorch model to inspect.
+        part (str, optional): The name of the module to inspect. 
+                            Supports nested modules using dot notation (e.g., 'encoder.linear_encode').
+                            If None, all top-level modules are inspected.
+        min_size (int, optional): Minimum memory size (in MB) to display a module.
+    """
+    def bytes_to_mb(bytes_size):
+        return bytes_size / 1_048_576  # Convert bytes to megabytes
+
+    def get_module_by_name(model, name):
+        """
+        Retrieves a submodule from the model based on a dot-separated module name.
+
+        Args:
+            model (nn.Module): The PyTorch model.
+            name (str): Dot-separated module name.
+
+        Returns:
+            nn.Module: The retrieved submodule.
+
+        Raises:
+            AttributeError: If the module name is invalid.
+        """
+        if not name:
+            return model
+        return model.get_submodule(name)
+
+    def print_module_memory(module, module_name, indent=0):
+        prefix = "    " * indent
+        total_params = sum(p.numel() for p in module.parameters())
+        total_size_bytes = sum(p.numel() * p.element_size() for p in module.parameters())
+        total_size_mb = bytes_to_mb(total_size_bytes)
+        if total_size_mb < min_size:
+            return
+        print(f"{prefix}{module_name}:")
+        print(f"{prefix}  Total parameters: {total_params}")
+        print(f"{prefix}  Memory usage: {total_size_mb:.4f} MB")
+
+    if part:
+        try:
+            target_module = get_module_by_name(model, part)
+        except AttributeError:
+            print(f"Error: '{part}' is not a valid module name in the model.")
+            return
+
+        print(f"Memory usage for module '{part}':")
+        submodules = list(target_module.named_children())
+
+        total_size_bytes = 0
+        for sub_name, sub_module in submodules:
+            print_module_memory(sub_module, sub_name, indent=1)
+            submodule_size = sum(p.numel() * p.element_size() for p in sub_module.parameters())
+            total_size_bytes += submodule_size
+
+        # Calculate exclusive parameters (parameters not part of any submodules)
+        submodule_param_ids = set()
+        for _, sub_module in submodules:
+            for p in sub_module.parameters():
+                submodule_param_ids.add(id(p))
+
+        exclusive_params = [p for p in target_module.parameters() if id(p) not in submodule_param_ids]
+
+        if exclusive_params:
+            exclusive_params_num = sum(p.numel() for p in exclusive_params)
+            exclusive_size_bytes = sum(p.numel() * p.element_size() for p in exclusive_params)
+            exclusive_size_mb = bytes_to_mb(exclusive_size_bytes)
+            print(f"    {part} exclusive parameters:")
+            print(f"      Total parameters: {exclusive_params_num}")
+            print(f"      Memory usage: {exclusive_size_mb:.4f} MB")
+            total_size_bytes += exclusive_size_bytes
+
+        total_size_mb = bytes_to_mb(total_size_bytes)
+        print(f"Total memory usage of module '{part}': {total_size_mb:.4f} MB")
+    else:
+        print("Memory usage per top-level module:")
+        total_model_memory = 0
+        for name, module in model.named_children():
+            total_params = sum(p.numel() for p in module.parameters())
+            total_size_bytes = sum(p.numel() * p.element_size() for p in module.parameters())
+            total_size_mb = bytes_to_mb(total_size_bytes)
+            if total_size_mb < min_size:
+                continue
+            print(f"{name}:")
+            print(f"  Total parameters: {total_params}")
+            print(f"  Memory usage: {total_size_mb:.4f} MB")
+            total_model_memory += total_size_bytes
+
+        total_model_memory_mb = bytes_to_mb(total_model_memory)
+        print(f"Total memory usage of the model: {total_model_memory_mb:.4f} MB")
+
+
+
+def dataloader_to_arrays(dataloader, device='cpu'):
+    all_x = []
+    all_y = {}
+
+    # Iterate over all batches in the DataLoader
+    for batch_idx, (x, y) in enumerate(dataloader):
+        # Move tensors to the specified device
+        x = x.to(device)
         
-        assert isinstance(self.array_list, list), "Input should be a list of numpy arrays."
-        assert len(self.array_list) > 0, "Input list is empty. Please provide a list with numpy arrays."
-        assert all(isinstance(item, (np.ndarray, np.memmap)) for item in self.array_list), "Input list should only contain numpy arrays."
-
-        self.cumulative_sizes = [i for i in range(len(self.array_list))]
-
-        self._idx_start = int(_idx_start) if _idx_start is not None else 0
-        self._idx_end = int(_idx_end) if _idx_end is not None else int(self.cumulative_sizes[-1])
-
-        assert isinstance(self._idx_start, int), "Minimum length should be an integer."
-        assert isinstance(self._idx_end, int), "Maximum length should be an integer."
-        assert self._idx_start < self._idx_end, "Minimum length should be smaller than maximum length."
-
-        self.total_length = len(array_list)-1 #int(min(self.cumulative_sizes[-1], self._idx_end - self._idx_start))  # Store length for faster access
-
-        if shuffle and random_sampling:
-            raise ValueError("Cannot use both shuffling and resevoir sampling at the same time.")
-
-        # Shuffling
-        self.seed = seed
-        self.shuffle = shuffle
-        self.shuffle_indices = None
-        self.random_sampling = random_sampling
-        self.rng = np.random.default_rng(seed)
-
-        if self.shuffle:
-            self.shuffle_indices = self.rng.permutation(range(self._idx_start, self._idx_end))
+        # Detach and convert x to a NumPy array
+        all_x.append(x.detach().cpu().numpy())
+        
+        # Process y if it's a dictionary
+        if isinstance(y, dict):
+            for key, value in y.items():
+                value = value.to(device).detach().cpu().numpy()
+                if key not in all_y:
+                    all_y[key] = []
+                all_y[key].append(value)
+        else:
+            y = y.to(device).detach().cpu().numpy()
+            if 'default' not in all_y:
+                all_y['default'] = []
+            all_y['default'].append(y)
+        
+        print(f"Processed batch {batch_idx + 1}/{len(dataloader)}")
     
+    # Concatenate all x batches along the first dimension (batch size)
+    all_x = np.concatenate(all_x, axis=0)
+
+    # Concatenate all y batches for each key in the dictionary
+    for key in all_y:
+        all_y[key] = np.concatenate(all_y[key], axis=0)
     
-    def _load_item(self, idx: int):
-        """ Load an item from the array list. """
-        # array_idx = np.searchsorted(self.cumulative_sizes, idx, side='right') - 1
+    return all_x, all_y
 
-        # calculated_idx = idx - self.cumulative_sizes[array_idx]
-        # if calculated_idx < 0 or calculated_idx >= self.array_list[array_idx].shape[0]:
-        #     raise IndexError(f'Index {idx} out of bounds for MultiArray with length {self.__len__()}')
 
-        output = self.array_list[idx]# [calculated_idx]
+def dataloader_to_tensors(dataloader, device='cpu'):
+    all_x = []
+    all_y = {}
 
-        return output
+    # Iterate over all batches in the DataLoader
+    for batch_idx, (x, y) in enumerate(dataloader):
+        # Move tensors to the specified device
+        x = x.to(device)
+        all_x.append(x)
+
+        # Process y if it's a dictionary
+        if isinstance(y, dict):
+            for key, value in y.items():
+                value = value.to(device)
+                if key not in all_y:
+                    all_y[key] = []
+                all_y[key].append(value)
+        else:
+            y = y.to(device)
+            if 'default' not in all_y:
+                all_y['default'] = []
+            all_y['default'].append(y)
+
+        print(f"Processed batch {batch_idx + 1}/{len(dataloader)}")
+    
+    # Concatenate all x tensors along the first dimension (batch size)
+    all_x = torch.cat(all_x, dim=0)
+
+    # Concatenate all y tensors for each key in the dictionary
+    for key in all_y:
+        all_y[key] = torch.cat(all_y[key], dim=0)
+    
+    return all_x, all_y
+
+def convert_to_onnx(trainer, batch_size=32, input_size=128, num_channels=10, onnx_path = "geoaware_n50.onnx"):
+    dummy_input = torch.randn(batch_size, num_channels, input_size, input_size)
+    trainer.model.eval()
+    torch.onnx.export(trainer.model, dummy_input, onnx_path, export_params=True, opset_version=9, do_constant_folding=True, input_names=['input'], output_names=['output'], dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
+
+    # dummy_input = torch.randn(batch_size, 8, input_size, input_size)
+    # torch.onnx.export(model, dummy_input, "model.onnx", opset_version=10)
+
+
+def ddp_setup():
+    """
+    Set up DistributedDataParallel training using environment variables.
+    """
+    world_rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    os.environ["OMP_NUM_THREADS"] = str(max(1, multiprocessing.cpu_count() // world_size))
+    
+    dist.init_process_group(
+        backend="nccl",
+        init_method="env://",
+        world_size=world_size,
+        rank=world_rank
+    )
+    torch.cuda.set_device(local_rank)  # Bind the current process to the local GPU
+    return world_rank, local_rank, world_size
+
+
+
+def ddp_cleanup():
+    """
+    Cleanup the distributed process group.
+    """
+    dist.destroy_process_group()
+
+
+

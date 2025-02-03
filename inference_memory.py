@@ -26,7 +26,7 @@ def main():
 
     # ==== The rest of your script (with minor modifications to use the variables) ====
     
-    from models.model_foundation.model_foundation_local_rev2 import get_phisat2_model
+    from models.utils_fm import get_phisat2_model
 
     torch.cuda.reset_peak_memory_stats()  # Reset peak memory metrics
     memory_initial = torch.cuda.memory_allocated()

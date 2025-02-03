@@ -1,7 +1,6 @@
 
 experiment_name: pretrained/phi2_GeoAware
-downstream_task: pretraining
-model_name: OVCompatible_FoundationModel4Task_nano   # **********************************
+model_name: phisatnet_nano   # **********************************
 augmentations: True
 batch_size: 16
 model_device: cuda
@@ -19,21 +18,13 @@ split_ratio: 1.0
 regions: null
 vis_val: True
 warmup: True
-warmp_steps: 5
+warmup_steps: 5
 warmup_gamma: null
 min_lr: 0.000001
-pretrained_model_path: null # **********************************
-freeze_pretrained: False
-data_path_128_10m: /home/phimultigpu/phisat2_foundation/lmdb_patches_256_1024
-data_path_224_10m: /home/phimultigpu/phisat2_foundation/lmdb_patches_256_1024
-data_path_224_30m: /home/phimultigpu/phisat2_foundation/lmdb_patches_256_1024
-additional_inference: train_test                      # train_test, train_test_inference, inference, train_inference # **********************************
-inference_model_path: null # **********************************
-inference_also_on_trainval: False
-data_path_inference_128: /home/phimultigpu/phisat2_foundation/lmdb_patches_256_1024 # **********************************
-data_path_inference_224: /home/phimultigpu/phisat2_foundation/lmdb_patches_256_1024 # **********************************
+data_path: /home/phimultigpu/phisat2_foundation/lmdb_patches_256_1024
+train_mode: train_test                      # train_test, train_test_inference, inference, train_inference # **********************************
 output_path: /home/phimultigpu/phisat2_foundation/models
 data_parallel: DDP
 device_ids: [0, 1, 2, 3]
-pad_to_10_bands: False
 only_get_datasets: False
+fixed_task: null
