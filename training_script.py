@@ -1,6 +1,5 @@
 import os
 import sys
-import pdb
 import random
 import warnings
 import argparse
@@ -198,6 +197,38 @@ def main(
     # -----------------------------------------------------------------------
     model = get_models(model_name, input_channels, input_size, fixed_task)
     NAME = model.__class__.__name__
+    
+    # Parallelize model (DP or DDP) and print model summary
+    if data_parallel == 'DP':
+        model = nn.DataParallel(model, device_ids=device_ids).to(model_device)
+    elif data_parallel == 'DDP':
+        model = nn.SyncBatchNorm.convert_sync_batchnorm(model).to(model_device)
+        model = DDP(model, device_ids=[model_device], output_device=model_device)
+
+    # Print model summary and module sizes
+    if world_rank == 0:
+        model_summary = summary(model, input_size=(batch_size, input_channels, input_size, input_size))
+        if model_device == 'cpu':
+            model.to(model_device)
+            print('Model moved back to CPU after summary') # sometimes summary moves model to GPU if available
+
+        valid_modules = ["module", "model", "encoder", "decoder", "module.encoder", "module.decoder"]
+
+        # Filter out invalid ones
+        existing_modules = [
+            name for name in valid_modules 
+            if hasattr(model, name) or (lambda n: hasattr(model, "get_submodule") and hasattr(model, n) and model.get_submodule(n))(name)
+        ]
+        
+        # Print memory usage only for valid modules
+        print(module_memory_usage(model))
+        print('-------------------')
+        for module_name in existing_modules:
+            print(module_memory_usage(model, module_name))
+            print('-------------------')
+
+    else:
+        model_summary = None
 
 
 
@@ -263,42 +294,6 @@ def main(
 
     if only_get_datasets:
         return dl_train, dl_val, dl_test, dl_inference
-
-
-
-    # -----------------------------------------------------------------------
-    # 5. Parallelize model (DP or DDP) and print model summary
-    # -----------------------------------------------------------------------
-    if data_parallel == 'DP':
-        model = nn.DataParallel(model, device_ids=device_ids).to(model_device)
-    elif data_parallel == 'DDP':
-        model = nn.SyncBatchNorm.convert_sync_batchnorm(model).to(model_device)
-        model = DDP(model, device_ids=[model_device], output_device=model_device)
-
-    # Print model summary and module sizes
-    if world_rank == 0:
-        model_summary = summary(model, input_size=(batch_size, input_channels, input_size, input_size))
-        if model_device == 'cpu':
-            model.to(model_device)
-            print('Model moved back to CPU after summary') # sometimes summary moves model to GPU if available
-
-        valid_modules = ["module", "model", "encoder", "decoder", "module.encoder", "module.decoder"]
-
-        # Filter out invalid ones
-        existing_modules = [
-            name for name in valid_modules 
-            if hasattr(model, name) or (lambda n: hasattr(model, "get_submodule") and hasattr(model, n) and model.get_submodule(n))(name)
-        ]
-        
-        # Print memory usage only for valid modules
-        print(module_memory_usage(model))
-        print('-------------------')
-        for module_name in existing_modules:
-            print(module_memory_usage(model, module_name))
-            print('-------------------')
-
-    else:
-        model_summary = None
 
 
 

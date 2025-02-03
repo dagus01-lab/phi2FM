@@ -2,7 +2,7 @@
 experiment_name: pretrain
 model_name: phisatnet_geoaware_nano   # **********************************
 augmentations: True
-batch_size: 16
+batch_size: 2
 model_device: cuda
 generator_device: cuda
 num_workers: 6

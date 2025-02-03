@@ -13,7 +13,7 @@ from .util_tools import make_bilinear_upsample
 # -----------------------------------------
 
 class CoreEncoderBlock(nn.Module):
-    def __init__(self, depth, in_channels, out_channels, norm="batch", activation="relu", padding="same"):
+    def __init__(self, depth, in_channels, out_channels, norm="batch", activation="relu"):
         super(CoreEncoderBlock, self).__init__()
 
         self.depth = depth
@@ -21,12 +21,11 @@ class CoreEncoderBlock(nn.Module):
         self.out_channels = out_channels
         self.activation = activation
         self.norm = norm
-        self.padding = padding
 
         self.blocks = []
         for i in range(self.depth):
             _in_channels = self.in_channels if i == 0 else self.out_channels
-            block = CoreCNNBlock(_in_channels, self.out_channels, norm=self.norm, activation=self.activation, padding=self.padding)
+            block = CoreCNNBlock(_in_channels, self.out_channels, norm=self.norm, activation=self.activation)
 
             self.blocks.append(block)
 
@@ -57,7 +56,6 @@ class FoundationEncoder(nn.Module):
         dims: List[int],
         norm="batch",
         activation="relu",
-        padding="same"
     ):
         """
         Args:
@@ -79,7 +77,6 @@ class FoundationEncoder(nn.Module):
                 out_channels=dims[i],
                 norm=norm,
                 activation=activation,
-                padding=padding,
             )
             self.stages.append(stage)
             prev_ch = dims[i]
@@ -103,7 +100,7 @@ class FoundationEncoder(nn.Module):
 # -----------------------------------------
 
 class CoreDecoderBlock(nn.Module):
-    def __init__(self, depth, in_channels, out_channels, *, norm="batch", activation="relu", padding="same"):
+    def __init__(self, depth, in_channels, out_channels, *, norm="batch", activation="relu"):
         super(CoreDecoderBlock, self).__init__()
 
         self.depth = depth
@@ -112,15 +109,14 @@ class CoreDecoderBlock(nn.Module):
         self.activation_blocks = activation
         self.activation = get_activation(activation)
         self.norm = norm
-        self.padding = padding
 
         self.upsample = make_bilinear_upsample(self.in_channels)
-        self.match_channels = CoreCNNBlock(self.in_channels * 2, self.out_channels, norm=self.norm, activation=self.activation_blocks, padding=self.padding)
-        self.attention = CoreAttentionBlock(self.in_channels, self.in_channels, norm=self.norm, activation=self.activation_blocks, padding=self.padding)
+        self.match_channels = CoreCNNBlock(self.in_channels * 2, self.out_channels, norm=self.norm, activation=self.activation_blocks)
+        self.attention = CoreAttentionBlock(self.in_channels, self.in_channels, norm=self.norm, activation=self.activation_blocks)
 
         self.blocks = []
         for _ in range(self.depth):
-            block = CoreCNNBlock(self.out_channels, self.out_channels, norm=self.norm, activation=self.activation_blocks, padding=self.padding)
+            block = CoreCNNBlock(self.out_channels, self.out_channels, norm=self.norm, activation=self.activation_blocks)
             self.blocks.append(block)
 
         self.blocks = nn.Sequential(*self.blocks)
@@ -150,7 +146,6 @@ class FoundationDecoder(nn.Module):
         dims: List[int],
         norm="batch",
         activation="relu",
-        padding="same"
     ):
         """
         Args:
@@ -171,7 +166,6 @@ class FoundationDecoder(nn.Module):
                 out_channels=out_ch,
                 norm=norm,
                 activation=activation,
-                padding=padding,
             )
             self.stages.append(stage)
 
@@ -189,6 +183,7 @@ class FoundationDecoder(nn.Module):
             # of encoder-forward, so we pop from the end)
             skip = skip_list.pop()
             x = stage(x, skip)
+        
         return x
 
 
@@ -217,7 +212,6 @@ class phisat2net_geoaware(nn.Module):
           - reconstruction
         """
         super().__init__()
-        print(f"input_dim: {input_dim}")
 
         # Basic model parameters
         self.input_dim = input_dim
@@ -253,7 +247,6 @@ class phisat2net_geoaware(nn.Module):
             out_channels=self.dims[0],
             norm="batch",
             activation=activation,
-            padding="same",
             residual=False
         )
 
@@ -268,7 +261,6 @@ class phisat2net_geoaware(nn.Module):
             dims=self.dims,  # we already consumed dims[0] in the stem
             norm="batch",
             activation=activation,
-            padding="same",
         )
 
         # ---------------------
@@ -281,7 +273,6 @@ class phisat2net_geoaware(nn.Module):
             out_channels=self.dims[-1],
             norm="batch",
             activation=activation,
-            padding="same",
             residual=True
         )
 
@@ -299,7 +290,6 @@ class phisat2net_geoaware(nn.Module):
                 dims=self.dims,
                 norm="batch",
                 activation=activation,
-                padding="same",
             )
         else:
             # If the only fixed task is coords, skip building a normal decoder
@@ -319,7 +309,6 @@ class phisat2net_geoaware(nn.Module):
                     out_channels=self.output_dim,
                     norm="batch",
                     activation=activation,
-                    padding="same",
                     residual=False
                 ),
                 nn.Sigmoid()  # optional final activation
@@ -391,13 +380,13 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         # 3) Bridge
         # ---------------------
-        bottom_feats = self.bridge(bottom)  
+        bottom_feats = self.bridge(bottom) 
 
 
         # ---------------------
         # 4) Decoder
         # ---------------------
-        if self.fixed_task is None or self.fixed_task in ["reconstruction", "climate"]:
+        if self.fixed_task is None or self.fixed_task == "reconstruction":
             decoded_feats = self.decoder(bottom_feats, skips)  # (B, dims[0], H, W)
         else:
             decoded_feats = None

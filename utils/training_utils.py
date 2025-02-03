@@ -14,6 +14,7 @@ class SE_Block(nn.Module):
     "credits: https://github.com/moskomule/senet.pytorch/blob/master/senet/se_module.py#L4"
     def __init__(self, channels, reduction=16, activation="relu"):
         super().__init__()
+        reduction = max(1, channels // reduction)
         self.reduction = reduction
         self.squeeze = nn.AdaptiveAvgPool2d(1)
         self.excitation = nn.Sequential(
@@ -311,7 +312,7 @@ def dataloader_to_tensors(dataloader, device='cpu'):
 def convert_to_onnx(trainer, batch_size=32, input_size=128, num_channels=10, onnx_path = "geoaware_n50.onnx"):
     dummy_input = torch.randn(batch_size, num_channels, input_size, input_size)
     trainer.model.eval()
-    torch.onnx.export(trainer.model, dummy_input, onnx_path, export_params=True, opset_version=9, do_constant_folding=True, input_names=['input'], output_names=['output'], dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
+    torch.onnx.export(trainer.model, dummy_input, onnx_path, opset_version=10)
 
     # dummy_input = torch.randn(batch_size, 8, input_size, input_size)
     # torch.onnx.export(model, dummy_input, "model.onnx", opset_version=10)
