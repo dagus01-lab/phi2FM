@@ -1,0 +1,25 @@
+# Ignore compiled Python files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore log files
+*.log
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore SSH keys (DO NOT COMMIT PRIVATE KEYS)
+github
+github.pub
+
+# Ignore model checkpoints or large data files (if applicable)
+models/
+*.h5
+*.pth
+*.ckpt
+*.onnx
+
+# Ignore system-specific files
+.DS_Store
+Thumbs.db
