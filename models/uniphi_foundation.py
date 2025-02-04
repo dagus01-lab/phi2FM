@@ -532,7 +532,7 @@ class phisat2net_uniphi(nn.Module):
 
 
 
-class phisat2_net_downstream(nn.Module):
+class phisat2net_uniphi_downstream(nn.Module):
     def __init__(
         self,
         *,

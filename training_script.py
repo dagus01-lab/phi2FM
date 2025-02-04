@@ -41,16 +41,16 @@ np.random.seed(42)
 random.seed(42)
 
 
-def get_models(model_name, input_channels, input_size, fixed_task=None):
+def get_models(model_name, downstream_task, input_channels, input_size, fixed_task=None):
     if model_name.startswith('phisatnet_geoaware_'):
         model_size = model_name.split('_')[-1]
-        return get_phisat2_model(model_size=model_size, return_model='pretrain', fixed_task=fixed_task,
+        return get_phisat2_model(model_size=model_size, downstream_task=downstream_task, fixed_task=fixed_task,
                                  unet_type='geoaware',
                                  input_dim=input_channels, output_dim=input_channels, img_size=input_size) # this line are kwargs
 
     if model_name.startswith('phisatnet_uniphi_'):
         model_size = model_name.split('_')[-1]
-        return get_phisat2_model(model_size=model_size, return_model='pretrain', fixed_task=fixed_task,
+        return get_phisat2_model(model_size=model_size, downstream_task=downstream_task, fixed_task=fixed_task,
                                  unet_type='uniphi',
                                  input_dim=input_channels, output_dim=input_channels, img_size=input_size) # this line are kwargs
 
@@ -71,6 +71,7 @@ def get_args_fn():
     parser.add_argument('--experiment_name', type=str, 
                         default=f'{date.today().strftime("%d%m%Y")}_experiment',
                         help='Experiment folder name')
+    parser.add_argument('--downstream_task', type=str, default='pretrain',)
     parser.add_argument('--model_name', type=str, required=True, help='Select appropriate model')
     parser.add_argument('--output_path', type=str, default='results', help='Path to save experiment results')
     parser.add_argument('--fixed_task', type=str, default=None, choices=[None, 'reconstruction', 'coords', 'climate'], 
@@ -138,6 +139,7 @@ def get_args():
 
 def main(
     experiment_name: str,
+    downstream_task: str,
     model_name: str,
     augmentations: bool,
     batch_size: int,
@@ -195,9 +197,9 @@ def main(
     # -----------------------------------------------------------------------
     # 2. DEFINE THE MODEL
     # -----------------------------------------------------------------------
-    model = get_models(model_name, input_channels, input_size, fixed_task)
+    model = get_models(model_name, downstream_task, input_channels, input_size, fixed_task)
     NAME = model.__class__.__name__
-    
+
     # Parallelize model (DP or DDP) and print model summary
     if data_parallel == 'DP':
         model = nn.DataParallel(model, device_ids=device_ids).to(model_device)
@@ -230,6 +232,7 @@ def main(
     else:
         model_summary = None
 
+    import pdb; pdb.set_trace()
 
 
     # -----------------------------------------------------------------------

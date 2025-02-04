@@ -57,9 +57,6 @@ class CoreAttentionBlock(nn.Module):
     ):
         super(CoreAttentionBlock, self).__init__()
 
-        assert lower_channels > 0, f"Got lower_channels={lower_channels}"
-        assert higher_channels > 0, f"Got higher_channels={higher_channels}"
-
         self.lower_channels = lower_channels
         self.higher_channels = higher_channels
         self.activation = get_activation(activation)

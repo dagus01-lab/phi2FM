@@ -8,8 +8,8 @@ import torch.distributed as dist
 
 from collections import OrderedDict
 
-from .uniphi_foundation import phisat2net_uniphi
-from .geoaware_foundation import phisat2net_geoaware
+from .uniphi_foundation import phisat2net_uniphi, phisat2net_uniphi_downstream
+from .geoaware_foundation import phisat2net_geoaware, phisat2net_geoaware_downstream
 
 # -------------------------------------------------------------------
 # MULTI-TASK LOSS FUNCTION
@@ -345,7 +345,7 @@ class PerceptualLoss(nn.Module):
 def get_phisat2_model(
     model_size = 'nano',
     apply_zoom = False,
-    return_model=None, # 'classifier', 'pretrain', 'pretrain_compatible', None
+    downstream_task=None,
     fixed_task=None,
     unet_type='uniphi', # 'uniphi', 'geoaware'
     **kwargs
@@ -399,11 +399,11 @@ def get_phisat2_model(
         raise ValueError(f"Invalid model size: {model_size}")
     
 
-    if return_model == 'pretrain':
+    if downstream_task == 'pretrain':
         if unet_type == 'uniphi':
             return phisat2net_uniphi(depths=depths, 
                                      dims=dims, 
-                                     ov_compatiblity=False, 
+                                     ov_compatiblity=True, 
                                      dropout=True, 
                                      apply_zoom=apply_zoom, 
                                      fixed_task=fixed_task,
@@ -419,13 +419,22 @@ def get_phisat2_model(
                                        )
         
         
-    # elif return_model == 'downstream_segmentation':
-    #     return DownstreamPhiSat2(depths=depths, dims=dims, ov_compatiblity=True, task='segmentation', **kwargs)
-
-    # elif return_model == 'downstream_classification':
-    #     return DownstreamPhiSat2(depths=depths, dims=dims, ov_compatiblity=True, task='classification', **kwargs)
-
-    elif return_model is None:
+    else:
+        assert downstream_task in ['segmentation', 'classification'], f"Invalid return model: {downstream_task}"
+        if unet_type == 'uniphi':
+            return phisat2net_uniphi_downstream(depths=depths,
+                                                   dims=dims,
+                                                   ov_compatiblity=True,
+                                                   task=downstream_task,
+                                                   **kwargs)
+        elif unet_type == 'geoaware':
+            return phisat2net_geoaware_downstream(depths=depths,
+                                                   dims=dims,
+                                                   task=downstream_task,
+                                                   **kwargs)
+        
+        
+    if downstream_task is None:
         updated_kwargs = kwargs.copy()
         updated_kwargs.update({'depths': depths, 'dims': dims})
         return updated_kwargs

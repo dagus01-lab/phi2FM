@@ -156,6 +156,7 @@ class FoundationDecoder(nn.Module):
         assert len(depths) == len(dims), f"depths and dims must have the same length. dims={dims}, depths={depths}"
 
         self.stages = nn.ModuleList()
+        self.num_stages = len(dims)
         # We'll build them in reverse to match the skip connections
         for i in reversed(range(len(dims))):
             in_ch = dims[i]
@@ -178,11 +179,10 @@ class FoundationDecoder(nn.Module):
         Returns:
             x: the final upsampled feature map
         """
-        for stage in self.stages:
-            # pop the last skip (note that skip_list is in the order 
-            # of encoder-forward, so we pop from the end)
-            skip = skip_list.pop()
-            x = stage(x, skip)
+        skip_list = skip_list[::-1]
+        for i in range(self.num_stages):
+            skip = skip_list[i]
+            x = self.stages[i](x, skip)
         
         return x
 
@@ -426,3 +426,130 @@ class phisat2net_geoaware(nn.Module):
         }
 
         return out_dict
+
+
+
+
+
+
+
+
+
+
+class phisat2net_geoaware_downstream(nn.Module):
+    def __init__(
+        self,
+        *,
+        input_dim=3,
+        output_dim=None,
+        depths=None,
+        dims=None,
+        img_size=128,
+        dropout=True,      # optional, not really used by the Core blocks
+        activation="gelu",
+        task='classification'
+    ):
+        super().__init__()
+
+        # Basic model parameters
+        self.input_dim = input_dim
+        self.output_dim = input_dim if output_dim is None else output_dim
+        self.depths = depths
+        self.dims = dims
+        self.img_size = img_size
+        self.task = task
+
+        self.dropout = dropout
+
+        if dropout:
+            self.encoder_drop_probs = [0.0, 0.05, 0.1, 0.15]
+            self.decoder_drop_probs = [0.1, 0.15, 0.15, 0.2]
+            self.decoder_drop = 0.1
+
+            self.class_dropout = 0.1
+            self.segm_dropout  = 0.15
+        else:
+            self.encoder_drop_probs = None
+            self.decoder_drop_probs = None
+            self.decoder_drop = None
+
+            self.class_dropout = 0.0
+            self.segm_dropout  = 0.0
+
+        # ---------------------
+        # 1) Stem
+        # ---------------------
+        # We will go from input_dim -> dims[0]
+        self.stem = CoreCNNBlock(
+            in_channels=self.input_dim,
+            out_channels=self.dims[0],
+            norm="batch",
+            activation=activation,
+            residual=False
+        )
+
+        # ---------------------
+        # 2) Encoder
+        # ---------------------
+        # We'll create an encoder from dims[0] -> dims[1] -> dims[2] -> ...
+        # with the specified depths
+        self.encoder = FoundationEncoder(
+            input_dim=self.dims[0],
+            depths=self.depths,
+            dims=self.dims,  # we already consumed dims[0] in the stem
+            norm="batch",
+            activation=activation,
+        )
+
+        # ---------------------
+        # Bridge
+        # ---------------------
+        # Typically we do a small bridging block at the bottom
+        # to let the model "breathe" in the bottleneck:
+        self.bridge = CoreCNNBlock(
+            in_channels=self.dims[-1],
+            out_channels=self.dims[-1],
+            norm="batch",
+            activation=activation,
+            residual=True
+        )
+
+        # ---------------------
+        # 3) Decoder
+        # ---------------------
+        self.decoder = FoundationDecoder(
+            depths=self.depths,
+            dims=self.dims,
+            norm="batch",
+            activation=activation,
+        )
+
+        # -------------------------------
+        # Heads (choose by task)
+        # -------------------------------
+        if self.task == 'classification':
+            self.head_clas = nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(self.dims[-1], self.output_dim),
+            )
+
+        elif self.task == 'segmentation':
+            self.head_segm = nn.Sequential(
+                CoreCNNBlock(self.dims[0], self.dims[0], norm="batch", activation=activation),
+                nn.Conv2d(self.dims[0], self.output_dim, kernel_size=1, padding=0),
+            )
+
+        else:
+            raise ValueError(f"Invalid task: {self.task}")
+    
+    def forward(self, x):
+        x = self.stem(x)
+        x, skips = self.encoder(x)
+        if self.task == 'classification':
+            x = self.head_clas(x)
+        elif self.task == 'segmentation':
+            x = self.decoder(x, skips)
+            x = self.head_segm(x)
+        else:
+            raise ValueError(f"Invalid task: {self.task}")
+        return x
