@@ -245,9 +245,9 @@ class phisat2net_geoaware(nn.Module):
         self.stem = CoreCNNBlock(
             in_channels=self.input_dim,
             out_channels=self.dims[0],
-            norm="batch",
+            norm="group",
             activation=activation,
-            residual=False
+            residual=True
         )
 
         # ---------------------
@@ -259,7 +259,7 @@ class phisat2net_geoaware(nn.Module):
             input_dim=self.dims[0],
             depths=self.depths,
             dims=self.dims,  # we already consumed dims[0] in the stem
-            norm="batch",
+            norm="group",
             activation=activation,
         )
 
@@ -271,7 +271,7 @@ class phisat2net_geoaware(nn.Module):
         self.bridge = CoreCNNBlock(
             in_channels=self.dims[-1],
             out_channels=self.dims[-1],
-            norm="batch",
+            norm="group",
             activation=activation,
             residual=True
         )
@@ -288,7 +288,7 @@ class phisat2net_geoaware(nn.Module):
             self.decoder = FoundationDecoder(
                 depths=self.depths,
                 dims=self.dims,
-                norm="batch",
+                norm="group",
                 activation=activation,
             )
         else:
@@ -307,9 +307,9 @@ class phisat2net_geoaware(nn.Module):
                 CoreCNNBlock(
                     in_channels=self.dims[0],
                     out_channels=self.output_dim,
-                    norm="batch",
+                    norm="group",
                     activation=activation,
-                    residual=False
+                    residual=True
                 ),
                 nn.Sigmoid()  # optional final activation
             )
@@ -366,13 +366,16 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         # 1) Stem
         # ---------------------
+        # print(f"Input shape: {x.shape}, mean={x.mean().item():.3f}, max={x.max().item():.3f}")
         x_stem = self.stem(x)  # (B, dims[0], H, W)
+        # print(f"Stem shape: {x_stem.shape}, mean={x_stem.mean().item():.3f}, max={x_stem.max().item():.3f}")
 
 
         # ---------------------
         # 2) Encoder
         # ---------------------
-        bottom, skips = self.encoder(x_stem) 
+        bottom, skips = self.encoder(x_stem)
+        # print(f"Bottom shape: {bottom.shape}, mean={bottom.mean().item():.3f}, max={bottom.max().item():.3f}")
         # bottom: (B, dims[-1], H//(2^num_stages), W//(2^num_stages))
         # skips: list of intermediate features
 
@@ -380,7 +383,8 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         # 3) Bridge
         # ---------------------
-        bottom_feats = self.bridge(bottom) 
+        bottom_feats = self.bridge(bottom)
+        # print(f"Bridge shape: {bottom_feats.shape}, mean={bottom_feats.mean().item():.3f}, max={bottom_feats.max().item():.3f}")
 
 
         # ---------------------
@@ -388,6 +392,7 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         if self.fixed_task is None or self.fixed_task == "reconstruction":
             decoded_feats = self.decoder(bottom_feats, skips)  # (B, dims[0], H, W)
+            # print(f"Decoded shape: {decoded_feats.shape}, mean={decoded_feats.mean().item():.3f}, max={decoded_feats.max().item():.3f}")  
         else:
             decoded_feats = None
 

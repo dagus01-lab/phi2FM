@@ -692,7 +692,7 @@ class TrainFoundation(TrainBase):
 
             # Now create your overall param-group list:
             
-            self.lr_mult_sigma = 0.1
+            self.lr_mult_sigma = 0.5
             self.lr_mult_weights = 1.0
             
             param_groups = []
@@ -727,9 +727,7 @@ class TrainFoundation(TrainBase):
                                         lr=self.learning_rate, eps=1e-06)
 
         scaler = GradScaler()
-        
-        # import pdb; pdb.set_trace()
-        
+                
         return scaler, optimizer
 
 
@@ -1119,6 +1117,12 @@ class TrainFoundation(TrainBase):
 
     def log_layer(self):
         import logging
+        print("Logging layer outputs...")
+        # Delete existing log files if they exist
+        log_files = ["forward_pass.log", "backward_pass.log"]
+        for log_file in log_files:
+            if os.path.exists(log_file):
+                os.remove(log_file)
         # Forward pass logger
         forward_logger = logging.getLogger("forward_logger")
         forward_handler = logging.FileHandler("forward_pass.log")
@@ -1140,14 +1144,14 @@ class TrainFoundation(TrainBase):
                 for key, value in output.items():
                     if torch.is_tensor(value):
                         mean, std = value.mean().item(), value.std().item()
-                        forward_logger.info(f"{layer_name} ({module.__class__.__name__}) Output {key} - mean: {mean:.3e}, std: {std:.3e}, min: {value.min().item():.3e}, max: {value.max().item():.3e}")
+                        forward_logger.info(f"{layer_name} ({module.__class__.__name__}) Output {key} - mean: {mean:.3e}, std: {std:.3e}, min: {value.min().item():.3e}, max: {value.max().item():.3e}, shape: {value.shape}")
                         if isinstance(module, torch.nn.BatchNorm2d) and std < 1e-2:
                             forward_logger.warning(f"🚨 {layer_name} ({module.__class__.__name__}) has LOW STD: {std:.3e}. Possible numerical instability! 🚨")
                     else:
                         forward_logger.info(f"{layer_name} ({module.__class__.__name__}) Output {key} - not a tensor, cannot calculate mean/std")
             elif torch.is_tensor(output):
                 mean, std = output.mean().item(), output.std().item()
-                forward_logger.info(f"{layer_name} ({module.__class__.__name__}) - Output mean: {mean:.3e}, std: {std:.3e}, min: {output.min().item():.3e}, max: {output.max().item():.3e}")
+                forward_logger.info(f"{layer_name} ({module.__class__.__name__}) - Output mean: {mean:.3e}, std: {std:.3e}, min: {output.min().item():.3e}, max: {output.max().item():.3e}, shape: {output.shape}")
                 if isinstance(module, torch.nn.BatchNorm2d) and std < 1e-2:
                     forward_logger.warning(f"🚨 {layer_name} ({module.__class__.__name__}) has LOW STD: {std:.3e}. Possible numerical instability! 🚨")
             else:
@@ -1177,6 +1181,30 @@ class TrainFoundation(TrainBase):
                 layer.register_forward_hook(lambda module, inp, out, n=name: forward_hook(module, inp, out, n))
                 layer.register_full_backward_hook(lambda module, grad_in, grad_out, n=name: full_backward_hook(module, grad_in, grad_out, n))
 
+
+    def remove_log_layer(self):
+        import logging
+        print("Removing logging layer outputs...")
+        # Remove handlers from loggers to prevent duplicate logging
+        forward_logger = logging.getLogger("forward_logger")
+        for handler in forward_logger.handlers[:]:  # Copy handlers list to avoid modification issues
+            forward_logger.removeHandler(handler)
+            handler.close()
+        
+        backward_logger = logging.getLogger("backward_logger")
+        for handler in backward_logger.handlers[:]:
+            backward_logger.removeHandler(handler)
+            handler.close()
+        
+        # Iterate through all modules and remove hooks
+        for name, layer in self.model.named_modules():
+            if hasattr(layer, '_forward_hooks'):
+                layer._forward_hooks.clear()
+            if hasattr(layer, '_backward_hooks'):
+                layer._backward_hooks.clear()
+            if hasattr(layer, '_full_backward_hooks'):
+                layer._full_backward_hooks.clear()
+        
 
 
     def t_loop(self, epoch, s):
@@ -1214,7 +1242,7 @@ class TrainFoundation(TrainBase):
         # ) as prof:
         
         
-        # self.log_layer()
+        # self.remove_log_layer()
         
         if True:
 
@@ -1273,10 +1301,16 @@ class TrainFoundation(TrainBase):
                     self.optimizer.step()
 
 
+                # for name, param in self.model.named_parameters():
+                #     if param.grad is None:
+                #         print(f"🚨 No gradient for {name}")
+                #     elif torch.all(param.grad == 0):
+                #         print(f"🟡 Zero gradient for {name}")
+                #     else:
+                #         print(f"✅ Gradient flowing in {name} (mean: {param.grad.abs().mean():.2e})")
+
                 # CHECK FOR NaNs or INFs
-                # import pdb; pdb.set_trace()
                 self.check_inf_nan(loss, log_loss, images, labels, outputs)
-                
                 train_loss += loss.item()
                 
                 # ------------------------------
@@ -1317,7 +1351,6 @@ class TrainFoundation(TrainBase):
 
                 # # Update the scheduler if needed
                 # if self.lr_scheduler == 'cosine_annealing':
-                #     import pdb; pdb.set_trace()
                 #     s.step()
 
         #         prof.step()
@@ -1366,11 +1399,11 @@ class TrainFoundation(TrainBase):
 
 
         # Return the final iteration index, the total train_loss, and the averaged log_loss
-        # import pdb; pdb.set_trace()
         return i, train_loss, epoch_log_loss
 
 
     def v_loop(self, epoch):
+        # self.log_layer()
         # Initialize the progress bar
 
         if self.is_main_process:
@@ -1419,6 +1452,8 @@ class TrainFoundation(TrainBase):
                     loss, log_loss = self.get_loss(outputs, labels)
 
                 # Accumulate overall validation loss
+                if torch.isnan(loss):
+                    import pdb; pdb.set_trace()
                 val_loss += loss.item()
                 
                 # Accumulate the log_loss stats
@@ -1484,7 +1519,6 @@ class TrainFoundation(TrainBase):
             epoch_log_loss['scaled_loss'] = [None]
             
         # Return j (last batch index), the cumulative validation loss, and the averaged log_loss
-        # import pdb; pdb.set_trace()
         return j, val_loss, epoch_log_loss
 
 
@@ -1571,15 +1605,12 @@ class TrainFoundation(TrainBase):
             if self.is_main_process and self.visualise_validation:
                 print(" ")
                 visualize.tabulate_losses(train_log_loss, val_log_loss, self.climate_segm, self.perceptual_loss)
-                # import pdb; pdb.set_trace()
                 
                 # PRINT GRADIENTS
                 print(" ")
                 stats = visualize.collect_model_stats(self.model)
                 visualize.print_stats_table(stats)
                 print(" ")
-
-            # import pdb; pdb.set_trace()
 
             # print(" ")
             # for name, param in self.model.named_parameters():

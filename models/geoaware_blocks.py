@@ -13,13 +13,6 @@ class CoreCNNBlock(nn.Module):
         self.out_channels = out_channels
         self.squeeze = SE_Block(self.out_channels)
 
-        self.match_channels = nn.Identity()
-        if in_channels != out_channels:
-            self.match_channels = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0, bias=False),  # padding=0 for 1x1 conv
-                get_normalization(norm, out_channels),
-            )
-
         # Conv1: 1x1 convolution never needs padding
         self.conv1 = nn.Conv2d(self.in_channels, self.out_channels, kernel_size=1, padding=0)
         self.norm1 = get_normalization(norm, self.out_channels)
@@ -32,6 +25,19 @@ class CoreCNNBlock(nn.Module):
         self.conv3 = nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1,  groups=1)
         self.norm3 = get_normalization(norm, self.out_channels)
 
+        # 4th layer: Residual
+        if self.residual:
+            if in_channels != out_channels:
+                self.match_channels = nn.Sequential(
+                    nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0, bias=False),  # padding=0 for 1x1 conv
+                    get_normalization(norm, out_channels),
+                )
+            else:
+                self.match_channels = nn.Sequential(
+                    nn.Identity(),
+                    get_normalization(norm, out_channels)
+                )
+
     def forward(self, x):
         # Forward remains unchanged
         identity = x
@@ -39,9 +45,11 @@ class CoreCNNBlock(nn.Module):
         x = self.activation(self.norm2(self.conv2(x)))
         x = self.norm3(self.conv3(x))
 
-        x = x * self.squeeze(x)
+        # print(f'before SE x mean: {x.mean().item():.3f}, x max: {x.max().item():.3f}, identity mean: {identity.mean().item():.3f}, identity max: {identity.max().item():.3f}')
+        x = self.squeeze(x)
 
         if self.residual:
+            # print(f'x mean: {x.mean().item():.3f}, x max: {x.max().item():.3f}, identity mean: {identity.mean().item():.3f}, identity max: {identity.max().item():.3f}')
             x = x + self.match_channels(identity)
 
         x = self.activation(x)

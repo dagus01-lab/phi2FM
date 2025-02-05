@@ -232,8 +232,6 @@ def main(
     else:
         model_summary = None
 
-    import pdb; pdb.set_trace()
-
 
     # -----------------------------------------------------------------------
     # 3. Construct output folder
@@ -297,8 +295,6 @@ def main(
 
     if only_get_datasets:
         return dl_train, dl_val, dl_test, dl_inference
-
-
 
     # -----------------------------------------------------------------------
     # 6. Initialize the trainer

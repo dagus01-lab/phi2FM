@@ -125,7 +125,6 @@ class FoundationEncoder(nn.Module):
             # (3) Downsample, except for the last iteration i=steps-1
             if i < self.steps - 1:
                 x = self.downsample[i](x)
-
         # x is now the bottom-most representation: (B, dims[-1], H_enc, W_enc)
         return x, skips
 

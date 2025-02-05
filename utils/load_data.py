@@ -9,74 +9,108 @@ from torch.utils.data.distributed import DistributedSampler
 
 
 class TransformX:
-    def __init__(self, augmentations=True, 
-                 clip_values=(0., 1.), rot_prob=0.25, flip_prob=0.25, 
-                 noise_prob=0.25, noise_std_range=(0.005, 0.015), input_size=None,):
+    def __init__(self, augmentations=True, input_size=None,
+                 min_scaling=np.array([0.]*8), max_scaling=np.array([1.]*8),
+                 means=np.array([0.]*8), stds=np.array([1.]*8),
+                 rot_prob=0.25, flip_prob=0.25, noise_prob=0.25,
+                 noise_std_range=(0.005, 0.015)):
         """
         Args:
             means (np.ndarray): Channel-wise means. Shape: (C,)
             stds (np.ndarray): Channel-wise stds. Shape: (C,)
             augmentations (bool): Whether to apply augmentations.
-            clip_values (tuple): (min_val, max_val) for clipping.
             rot_prob (float): Probability of applying rotation.
             flip_prob (float): Probability of applying flips.
             noise_prob (float): Probability of applying noise.
-            noise_std_range (tuple): (min_std, max_std) for noise std.
+            noise_std_range (tuple): (min_std, max_std) for noise.
+                NOTE: Here these values are interpreted relative to the [0,1]
+                scale. Since we will add noise in the original domain,
+                we multiply by (max - min) later.
             input_size (int, optional): If specified and the image is larger than 
                 input_size x input_size, randomly crop the image down to that size.
         """
         self.augmentations = augmentations
-        self.clip_min, self.clip_max = clip_values
+        
+        # Ensure arrays are 1D
+        means = means.reshape(-1)
+        stds = stds.reshape(-1)
+        min_scaling = min_scaling.reshape(-1)
+        max_scaling = max_scaling.reshape(-1)
+
+        # Precompute scaled means and stds for later normalization.
+        self.scaled_means = ((means - min_scaling) / (max_scaling - min_scaling))[:, None, None]
+        self.scaled_stds = (stds / (max_scaling - min_scaling))[:, None, None]
+
+        self.channel_range = (max_scaling - min_scaling)[:, None, None]  # Shape: (C,1,1)
+        self.min_scaling = min_scaling[:, None, None]
+        self.max_scaling = max_scaling[:, None, None]
+
         self.rot_prob = rot_prob
         self.flip_prob = flip_prob
         self.noise_prob = noise_prob
         self.noise_std_low, self.noise_std_high = noise_std_range
-        self.input_size = 256 if input_size > 128 else 128
-        self.new_size = input_size
-        self.sqrt10000 = np.sqrt(10000)  # Precompute constant for normalization
         
+        # Determine sizes for cropping
+        # We assume input_size is the original spatial size.
+        # new_size is the desired crop size.
+        self.input_size = input_size
+        self.original_size = 256 if input_size > 128 else 128
+
+
     def __call__(self, x_np):
-        # Spatial transforms
+        # x_np is assumed to be a NumPy array of shape (C, H, W)
+
+        # --- Spatial augmentations ---
         if self.augmentations:
-            
             rand_vals = np.random.rand(3)
-            
-            # Random Crop
-            if self.input_size > self.new_size:
-                top = np.random.randint(0, self.input_size - self.new_size + 1)
-                left = np.random.randint(0, self.input_size - self.new_size + 1)
-                x_np = x_np[:, top:top+self.new_size, left:left+self.new_size]
-                
-            # Rotation
+
+            # Random Crop if the input is larger than the desired crop size.
+            if self.original_size > self.input_size:
+                top = np.random.randint(0, self.original_size - self.input_size + 1)
+                left = np.random.randint(0, self.original_size - self.input_size + 1)
+                x_np = x_np[:, top:top+self.input_size, left:left+self.input_size]
+
+            # Rotation: 0, 90, 180, or 270 degrees
             if rand_vals[0] < self.rot_prob:
-                k = np.random.randint(0, 4)  # Random rotation: 0, 90, 180, or 270 degrees
-                x_np = np.rot90(x_np, k, axes=(1, 2))  # Rotate along H, W axes
+                k = np.random.randint(0, 4)
+                x_np = np.rot90(x_np, k, axes=(1, 2))
 
             # Horizontal flip
             if rand_vals[1] < self.flip_prob:
-                x_np = np.flip(x_np, axis=2)  # Flip along width axis
+                x_np = np.flip(x_np, axis=2)
 
             # Vertical flip
             if rand_vals[2] < self.flip_prob:
-                x_np = np.flip(x_np, axis=1)  # Flip along height axis
-        
+                x_np = np.flip(x_np, axis=1)
         else:
-            if self.input_size > self.new_size:
-                top = (self.input_size - self.new_size) // 2
-                left = (self.input_size - self.new_size) // 2
-                x_np = x_np[:, top:top+self.new_size, left:left+self.new_size]
+            # If no augmentations, perform a center crop if needed.
+            if self.original_size > self.input_size:
+                top = (self.original_size - self.input_size) // 2
+                left = (self.original_size - self.input_size) // 2
+                x_np = x_np[:, top:top+self.input_size, left:left+self.input_size]
 
-        # Non-spatial transforms
-        x_np = np.sqrt(x_np) / self.sqrt10000 # same as x_np = ( sqrt(x_np / 10000) - 0 ) / (sqrt2 - 0)
+        # --- Data Pre-Processing ---
 
-        # Add noise
+        # 1. Clip the raw values to the valid range in the original domain.
+        #    Use broadcasting over the spatial dimensions.
+        x_np = np.clip(x_np, self.min_scaling, self.max_scaling)
+
+        # 2. Add noise in the original domain.
         if self.augmentations and np.random.rand() < self.noise_prob:
-            noise_std = np.random.uniform(self.noise_std_low, self.noise_std_high)
-            noise = np.random.normal(0, noise_std, x_np.shape)
-            x_np += noise
+            # Because noise_std_range is defined relative to the [0,1] scale,
+            # we multiply by the channel-wise range to convert to the original scale.
+            # Generate a per-channel noise std (and broadcast to H,W).
+            noise_std = np.random.uniform(self.noise_std_low, self.noise_std_high, size=(x_np.shape[0], 1, 1)) * self.channel_range
+            noise = np.random.normal(0, noise_std, size=x_np.shape)
+            x_np = x_np + noise
+            # Optionally, clip again to ensure values stay in the valid range.
+            x_np = np.clip(x_np, self.min_scaling, self.max_scaling)
 
-        # Clip
-        x_np = np.clip(x_np, self.clip_min, self.clip_max)
+        # 3. Scale the data from the original range to [0, 1].
+        x_np = (x_np - self.min_scaling) / self.channel_range
+
+        # 4. Normalize to zero mean and unit variance (per channel).
+        x_np = (x_np - self.scaled_means) / self.scaled_stds
 
         return x_np
 
@@ -315,15 +349,27 @@ def load_foundation_data(lmdb_path_train, lmdb_path_val, lmdb_path_test, lmdb_pa
         mask_value=0
     )
 
+    global_min = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
+    global_max = np.array([27053., 27106., 27334., 27068., 27273., 27496., 27618., 27409.])
+    global_mean = np.array([1889.57135146, 1706.35570957, 1829.54409057, 1864.05266573, 2378.13355846, 1974.74770695, 2309.17435277, 2472.06254275])
+    global_std = np.array([1926.40004038, 1770.64430483, 2083.48230285, 1916.71983995, 2008.31424611, 2109.32162828, 2074.35633945, 2078.41143301])
 
 
     transform_x_train = TransformX(augmentations=with_augmentations,
-                                                         input_size=input_size,
-                                                         )
+                                   input_size=input_size,
+                                   min_scaling=global_min,
+                                   max_scaling=global_max,
+                                   means=global_mean,
+                                   stds=global_std,
+                                   )
 
     transform_x_test = TransformX(augmentations=False,
-                                                        input_size=input_size,
-                                                        )
+                                   input_size=input_size,
+                                   min_scaling=global_min,
+                                   max_scaling=global_max,
+                                   means=global_mean,
+                                   stds=global_std,
+                                   )
     
     # ---------------------------
     # 2. Load Datasets
@@ -379,8 +425,12 @@ def load_foundation_data(lmdb_path_train, lmdb_path_val, lmdb_path_test, lmdb_pa
             val_size = int(len(dataset_val) * split_ratio)
             unused_size = len(dataset_val) - val_size
             dataset_val, _ = random_split(dataset_val, [val_size, unused_size], generator=torch.Generator(device=device_dataloader))
+            
+            test_size = int(len(dataset_test) * split_ratio)
+            unused_size = len(dataset_test) - test_size
+            dataset_test, _ = random_split(dataset_test, [test_size, unused_size], generator=torch.Generator(device=device_dataloader))
     
-    if n_shot is not None:
+    elif n_shot is not None:
         dataset_train = Subset(dataset_train, range(n_shot))
         
         n_shot_val = int(n_shot / len(dataset_train) * len(dataset_val))
