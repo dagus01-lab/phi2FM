@@ -164,8 +164,14 @@ def visualize_pretrain(
         images = x.shape[0]
 
     # Example means/std
-    MEANS_MAJORTOM = np.array([0., 0., 0., 0., 0., 0., 0., 0.]) 
-    STD_MAJORTOM   = np.array([1., 1., 1., 1., 1., 1., 1., 1.])  
+    # global_min = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
+    # global_max = np.array([27053., 27106., 27334., 27068., 27273., 27496., 27618., 27409.])
+    # global_mean = np.array([1889.57135146, 1706.35570957, 1829.54409057, 1864.05266573, 2378.13355846, 1974.74770695, 2309.17435277, 2472.06254275])
+    # global_std = np.array([1926.40004038, 1770.64430483, 2083.48230285, 1916.71983995, 2008.31424611, 2109.32162828, 2074.35633945, 2078.41143301])
+    global_min = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
+    global_max = np.array([100., 100., 100., 100., 100., 100., 100., 100.])
+    global_mean = np.array([39.91732045, 37.5492021, 37.54950869, 39.21091477, 44.2665634, 39.50358262, 43.62563718, 45.28759192])
+    global_std = np.array([17.06368142, 17.08672835, 20.21215486, 17.8629414, 20.11975944, 20.02886564, 19.79381833, 20.16760416])
 
     # Move to CPU and convert to numpy
     x = x.cpu().detach().numpy()
@@ -181,8 +187,8 @@ def visualize_pretrain(
     # Denormalize Corrupted Images
     # ---------------------------------------
     corrupted_images = x[:images]
-    corrupted_images = (corrupted_images * STD_MAJORTOM.reshape(1, -1, 1, 1)) \
-                       + MEANS_MAJORTOM.reshape(1, -1, 1, 1)
+    corrupted_images = (corrupted_images * global_std.reshape(1, -1, 1, 1)) + global_mean.reshape(1, -1, 1, 1)
+    corrupted_images = (corrupted_images - global_min.reshape(1, -1, 1, 1)) / (global_max.reshape(1, -1, 1, 1) - global_min.reshape(1, -1, 1, 1))
     # Convert to RGB order
     rgb_corrupted_images = corrupted_images[:, [2, 1, 0], :, :]
 
@@ -228,10 +234,10 @@ def visualize_pretrain(
         reconstructed_pred = y_pred['reconstruction'][:images]
 
         # Denormalize
-        reconstructed = (reconstructed * STD_MAJORTOM.reshape(1, -1, 1, 1)) \
-                        + MEANS_MAJORTOM.reshape(1, -1, 1, 1)
-        reconstructed_pred = (reconstructed_pred * STD_MAJORTOM.reshape(1, -1, 1, 1)) \
-                             + MEANS_MAJORTOM.reshape(1, -1, 1, 1)
+        reconstructed = (reconstructed * global_std.reshape(1, -1, 1, 1)) + global_mean.reshape(1, -1, 1, 1)
+        reconstructed = (reconstructed - global_min.reshape(1, -1, 1, 1)) / (global_max.reshape(1, -1, 1, 1) - global_min.reshape(1, -1, 1, 1))
+        reconstructed_pred = (reconstructed_pred * global_std.reshape(1, -1, 1, 1)) + global_mean.reshape(1, -1, 1, 1)
+        reconstructed_pred = (reconstructed_pred - global_min.reshape(1, -1, 1, 1)) / (global_max.reshape(1, -1, 1, 1) - global_min.reshape(1, -1, 1, 1))
         # Convert to RGB
         reconstructed = reconstructed[:, [2, 1, 0], :, :]
         reconstructed_pred = reconstructed_pred[:, [2, 1, 0], :, :]
@@ -240,7 +246,7 @@ def visualize_pretrain(
         for i in range(images):
             mean_brightness = reconstructed[i].mean()
             if mean_brightness < 0.5:
-                brightness_factor = 0.5 / (mean_brightness + 1e-6)
+                brightness_factor = 0.5 / (mean_brightness + 1e-3)
             else:
                 brightness_factor = 1.0
             rgb_corrupted_images[i] = np.clip(rgb_corrupted_images[i] * brightness_factor, 0, 1)
@@ -484,6 +490,9 @@ def visualize_pretrain(
 
 
 
+from collections import defaultdict
+from tabulate import tabulate
+import torch
 
 def param_type_to_category(pname: str):
     """
@@ -533,26 +542,42 @@ def parse_name(name: str):
 def collect_model_stats(model: torch.nn.Module):
     """
     Collect gradient norms and stats (mean, std, min, max) for weights & biases,
-    grouped by (module, layer, sub-layer).
+    as well as similar stats for their gradients (if available), grouped by (module, layer, sub-layer).
     Returns a nested dictionary.
     """
     data_dict = defaultdict(lambda: {
-        'weight_grad': None,   # gradient norm for weight-like param
-        'bias_grad': None,     # gradient norm for bias-like param
-        'weight_mean': None, 'weight_std': None,  # stats for weight-like
+        # Parameter statistics
+        'weight_grad': None,   # L2 norm for weight-like param gradient
+        'bias_grad': None,     # L2 norm for bias-like param gradient
+        'weight_mean': None, 'weight_std': None,  # stats for weight-like parameter
         'weight_min': None, 'weight_max': None,
-        'bias_mean': None,   'bias_std': None,    # stats for bias-like
-        'bias_min': None,    'bias_max': None
+        'bias_mean': None,   'bias_std': None,    # stats for bias-like parameter
+        'bias_min': None,    'bias_max': None,
+        # Gradient statistics (detailed)
+        'weight_grad_mean': None, 'weight_grad_std': None,
+        'weight_grad_min': None,  'weight_grad_max': None,
+        'bias_grad_mean': None,   'bias_grad_std': None,
+        'bias_grad_min': None,    'bias_grad_max': None
     })
 
     for name, param in model.named_parameters():
         module_name, layer_name, sub_name, ptype = parse_name(name)
         category = param_type_to_category(ptype)  # 'weight' or 'bias'
 
-        # Calculate gradient norm if grad is not None
+        # Initialize gradient stats
         grad_norm = None
+        grad_mean = None
+        grad_std = None
+        grad_min = None
+        grad_max = None
+
         if param.grad is not None:
-            grad_norm = param.grad.data.norm(2).item()
+            grad_data = param.grad.data
+            grad_norm = grad_data.norm(2).item()
+            grad_mean = grad_data.mean().item()
+            grad_std  = grad_data.std().item()
+            grad_min  = grad_data.min().item()
+            grad_max  = grad_data.max().item()
 
         # Gather stats from param.data
         p_mean = param.data.mean().item()
@@ -568,12 +593,22 @@ def collect_model_stats(model: torch.nn.Module):
             data_dict[key]['weight_std']  = p_std
             data_dict[key]['weight_min']  = p_min
             data_dict[key]['weight_max']  = p_max
+
+            data_dict[key]['weight_grad_mean'] = grad_mean
+            data_dict[key]['weight_grad_std']  = grad_std
+            data_dict[key]['weight_grad_min']  = grad_min
+            data_dict[key]['weight_grad_max']  = grad_max
         else:  # 'bias'
             data_dict[key]['bias_grad'] = grad_norm
             data_dict[key]['bias_mean'] = p_mean
             data_dict[key]['bias_std']  = p_std
             data_dict[key]['bias_min']  = p_min
             data_dict[key]['bias_max']  = p_max
+
+            data_dict[key]['bias_grad_mean'] = grad_mean
+            data_dict[key]['bias_grad_std']  = grad_std
+            data_dict[key]['bias_grad_min']  = grad_min
+            data_dict[key]['bias_grad_max']  = grad_max
 
     return data_dict
 
@@ -591,7 +626,11 @@ def print_stats_table(stats_dict):
         "Mean ± Std (weight)",
         "Mean ± Std (bias)",
         "Min - Max (weight)",
-        "Min - Max (bias)"
+        "Min - Max (bias)",
+        "Grad Mean ± Std (weight)",
+        "Grad Mean ± Std (bias)",
+        "Grad Min - Max (weight)",
+        "Grad Min - Max (bias)"
     ]
 
     rows = []
@@ -599,11 +638,11 @@ def print_stats_table(stats_dict):
     for (module_name, layer_name, sub_name) in sorted(stats_dict.keys()):
         st = stats_dict[(module_name, layer_name, sub_name)]
 
-        # For formatting, handle None or numeric
+        # Format parameter gradients (L2 norm)
         w_grad_str = f"{st['weight_grad']:.2e}" if st['weight_grad'] is not None else "None"
         b_grad_str = f"{st['bias_grad']:.2e}"   if st['bias_grad'] is not None   else "None"
 
-        # Mean ± Std
+        # Mean ± Std for parameters
         w_mean_std_str = (
             f"{st['weight_mean']:.2e} ± {st['weight_std']:.2e}"
             if st['weight_mean'] is not None
@@ -615,7 +654,7 @@ def print_stats_table(stats_dict):
             else "None"
         )
 
-        # Min–Max
+        # Min–Max for parameters
         w_minmax_str = (
             f"{st['weight_min']:.2e} - {st['weight_max']:.2e}"
             if st['weight_min'] is not None
@@ -624,6 +663,30 @@ def print_stats_table(stats_dict):
         b_minmax_str = (
             f"{st['bias_min']:.2e} - {st['bias_max']:.2e}"
             if st['bias_min'] is not None
+            else "None"
+        )
+
+        # Format gradient statistics: Mean ± Std
+        w_grad_mean_std_str = (
+            f"{st['weight_grad_mean']:.2e} ± {st['weight_grad_std']:.2e}"
+            if st['weight_grad_mean'] is not None
+            else "None"
+        )
+        b_grad_mean_std_str = (
+            f"{st['bias_grad_mean']:.2e} ± {st['bias_grad_std']:.2e}"
+            if st['bias_grad_mean'] is not None
+            else "None"
+        )
+
+        # Format gradient statistics: Min – Max
+        w_grad_minmax_str = (
+            f"{st['weight_grad_min']:.2e} - {st['weight_grad_max']:.2e}"
+            if st['weight_grad_min'] is not None
+            else "None"
+        )
+        b_grad_minmax_str = (
+            f"{st['bias_grad_min']:.2e} - {st['bias_grad_max']:.2e}"
+            if st['bias_grad_min'] is not None
             else "None"
         )
 
@@ -636,20 +699,17 @@ def print_stats_table(stats_dict):
             w_mean_std_str,
             b_mean_std_str,
             w_minmax_str,
-            b_minmax_str
+            b_minmax_str,
+            w_grad_mean_std_str,
+            b_grad_mean_std_str,
+            w_grad_minmax_str,
+            b_grad_minmax_str
         ])
 
     print(tabulate(rows, headers=headers, tablefmt="simple", floatfmt=".2e"))
 
-# ------------------------------------------------------------------
-# USAGE EXAMPLE (assuming 'model' is your model):
-# 1. Forward pass
-# 2. Loss calculation
-# 3. loss.backward()
-# 4. Then collect and print:
 
-# stats = collect_model_stats(model)
-# print_stats_table(stats)
+
 
 
 def tabulate_losses(train_log_loss, val_log_loss, climate_segm, perceptual_loss):
@@ -659,7 +719,7 @@ def tabulate_losses(train_log_loss, val_log_loss, climate_segm, perceptual_loss)
         return f"{x:.3e}"
 
     # Define headers and dynamically exclude "total_variation" if climate_segm is False
-    headers = ["", "reconstruction", "perceptual", "climate", "geolocation"]
+    headers = ["reconstruction", "climate", "geolocation"]
 
     if perceptual_loss:
         headers.insert(2, "perceptual")

@@ -8,12 +8,15 @@ from torch.utils.data import Dataset, DataLoader, random_split, Subset
 from torch.utils.data.distributed import DistributedSampler
 
 
+import numpy as np
+
 class TransformX:
     def __init__(self, augmentations=True, input_size=None,
                  min_scaling=np.array([0.]*8), max_scaling=np.array([1.]*8),
                  means=np.array([0.]*8), stds=np.array([1.]*8),
                  rot_prob=0.25, flip_prob=0.25, noise_prob=0.25,
-                 noise_std_range=(0.005, 0.015)):
+                 noise_factor=0.05  # Factor for noise scaling
+                ):
         """
         Args:
             means (np.ndarray): Channel-wise means. Shape: (C,)
@@ -22,14 +25,12 @@ class TransformX:
             rot_prob (float): Probability of applying rotation.
             flip_prob (float): Probability of applying flips.
             noise_prob (float): Probability of applying noise.
-            noise_std_range (tuple): (min_std, max_std) for noise.
-                NOTE: Here these values are interpreted relative to the [0,1]
-                scale. Since we will add noise in the original domain,
-                we multiply by (max - min) later.
             input_size (int, optional): If specified and the image is larger than 
                 input_size x input_size, randomly crop the image down to that size.
+            noise_factor (float): Scaling factor for noise intensity.
         """
         self.augmentations = augmentations
+        self.noise_factor = noise_factor
         
         # Ensure arrays are 1D
         means = means.reshape(-1)
@@ -38,21 +39,17 @@ class TransformX:
         max_scaling = max_scaling.reshape(-1)
 
         # Precompute scaled means and stds for later normalization.
-        self.scaled_means = ((means - min_scaling) / (max_scaling - min_scaling))[:, None, None]
-        self.scaled_stds = (stds / (max_scaling - min_scaling))[:, None, None]
+        self.means = means[:, None, None]
+        self.stds = stds[:, None, None]
 
-        self.channel_range = (max_scaling - min_scaling)[:, None, None]  # Shape: (C,1,1)
         self.min_scaling = min_scaling[:, None, None]
         self.max_scaling = max_scaling[:, None, None]
 
         self.rot_prob = rot_prob
         self.flip_prob = flip_prob
         self.noise_prob = noise_prob
-        self.noise_std_low, self.noise_std_high = noise_std_range
         
         # Determine sizes for cropping
-        # We assume input_size is the original spatial size.
-        # new_size is the desired crop size.
         self.input_size = input_size
         self.original_size = 256 if input_size > 128 else 128
 
@@ -91,26 +88,20 @@ class TransformX:
 
         # --- Data Pre-Processing ---
 
-        # 1. Clip the raw values to the valid range in the original domain.
-        #    Use broadcasting over the spatial dimensions.
+        # 1. Take sqrt of the image
+        x_np = np.sqrt(x_np)
+
+        # 1. Clip the raw values to the valid range in the original domain (this will clip images to 10000 (100 because of sqrt))
         x_np = np.clip(x_np, self.min_scaling, self.max_scaling)
 
-        # 2. Add noise in the original domain.
+        # 2. Add noise.
         if self.augmentations and np.random.rand() < self.noise_prob:
-            # Because noise_std_range is defined relative to the [0,1] scale,
-            # we multiply by the channel-wise range to convert to the original scale.
-            # Generate a per-channel noise std (and broadcast to H,W).
-            noise_std = np.random.uniform(self.noise_std_low, self.noise_std_high, size=(x_np.shape[0], 1, 1)) * self.channel_range
-            noise = np.random.normal(0, noise_std, size=x_np.shape)
-            x_np = x_np + noise
-            # Optionally, clip again to ensure values stay in the valid range.
-            x_np = np.clip(x_np, self.min_scaling, self.max_scaling)
+            std_per_channel = x_np.std(axis=(1, 2), keepdims=True)  # Compute per-channel std
+            noise = np.random.randn(*x_np.shape) * std_per_channel * self.noise_factor
+            x_np = x_np + noise  # Add noise
 
-        # 3. Scale the data from the original range to [0, 1].
-        x_np = (x_np - self.min_scaling) / self.channel_range
-
-        # 4. Normalize to zero mean and unit variance (per channel).
-        x_np = (x_np - self.scaled_means) / self.scaled_stds
+        # 3. Normalize to zero mean and unit variance (per channel).
+        x_np = (x_np - self.means) / self.stds
 
         return x_np
 
@@ -349,10 +340,15 @@ def load_foundation_data(lmdb_path_train, lmdb_path_val, lmdb_path_test, lmdb_pa
         mask_value=0
     )
 
+    # global_min = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
+    # global_max = np.array([27053., 27106., 27334., 27068., 27273., 27496., 27618., 27409.])
+    # global_mean = np.array([1889.57135146, 1706.35570957, 1829.54409057, 1864.05266573, 2378.13355846, 1974.74770695, 2309.17435277, 2472.06254275])
+    # global_std = np.array([1926.40004038, 1770.64430483, 2083.48230285, 1916.71983995, 2008.31424611, 2109.32162828, 2074.35633945, 2078.41143301])
+
     global_min = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
-    global_max = np.array([27053., 27106., 27334., 27068., 27273., 27496., 27618., 27409.])
-    global_mean = np.array([1889.57135146, 1706.35570957, 1829.54409057, 1864.05266573, 2378.13355846, 1974.74770695, 2309.17435277, 2472.06254275])
-    global_std = np.array([1926.40004038, 1770.64430483, 2083.48230285, 1916.71983995, 2008.31424611, 2109.32162828, 2074.35633945, 2078.41143301])
+    global_max = np.array([100., 100., 100., 100., 100., 100., 100., 100.])
+    global_mean = np.array([39.91732045, 37.5492021, 37.54950869, 39.21091477, 44.2665634, 39.50358262, 43.62563718, 45.28759192])
+    global_std = np.array([17.06368142, 17.08672835, 20.21215486, 17.8629414, 20.11975944, 20.02886564, 19.79381833, 20.16760416])
 
 
     transform_x_train = TransformX(augmentations=with_augmentations,

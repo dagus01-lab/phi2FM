@@ -612,7 +612,7 @@ class TrainFoundation(TrainBase):
                 print("Initial losses:", initial_losses)
                 print("Initializing scales of individual losses")
 
-            self.criterion.scale_recon = 1.0 / initial_losses['reconstruction']
+            self.criterion.scale_recon = 5.0 / initial_losses['reconstruction']
             self.criterion.scale_seg =   1.0 / initial_losses['climate']
             self.criterion.scale_geo =   1.0 / initial_losses['geolocation']
             
@@ -626,7 +626,7 @@ class TrainFoundation(TrainBase):
             if self.is_main_process:
                 print("Initializing log variances of each loss")
             with torch.no_grad():
-                self.criterion.log_sigma_recon.copy_(torch.tensor(-0.5))
+                self.criterion.log_sigma_recon.copy_(torch.tensor(0.0))
                 self.criterion.log_sigma_clim.copy_(torch.tensor(0.0))
                 self.criterion.log_sigma_geo.copy_(torch.tensor(0.0))
                 
@@ -692,7 +692,7 @@ class TrainFoundation(TrainBase):
 
             # Now create your overall param-group list:
             
-            self.lr_mult_sigma = 0.5
+            self.lr_mult_sigma = 0.2
             self.lr_mult_weights = 1.0
             
             param_groups = []
@@ -722,7 +722,6 @@ class TrainFoundation(TrainBase):
             #     print(f"Layer {i + 1} learning rate: {param_group['lr']}")
 
         else:
-            print(f"Fixed task: {self.fixed_task}")
             optimizer = torch.optim.AdamW(self.model.parameters(),
                                         lr=self.learning_rate, eps=1e-06)
 
@@ -1452,8 +1451,6 @@ class TrainFoundation(TrainBase):
                     loss, log_loss = self.get_loss(outputs, labels)
 
                 # Accumulate overall validation loss
-                if torch.isnan(loss):
-                    import pdb; pdb.set_trace()
                 val_loss += loss.item()
                 
                 # Accumulate the log_loss stats

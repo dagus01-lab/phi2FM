@@ -8,6 +8,268 @@ from .geoaware_blocks import CoreCNNBlock, CoreAttentionBlock
 from .util_tools import make_bilinear_upsample
 
 
+# -------------------------------------------------------------------
+# FOUNDATION MODEL
+# -------------------------------------------------------------------
+
+class phisat2net_geoaware(nn.Module):
+    def __init__(
+        self,
+        *,
+        input_dim=3,
+        output_dim=None,
+        depths=None,
+        dims=None,
+        img_size=128,
+        dropout=True,      # optional, not really used by the Core blocks
+        activation="gelu",
+        fixed_task=None,
+    ):
+        """
+        A U-Net-like model with extra heads for:
+          - climate zone classification
+          - geolocation
+          - zoom level
+          - reconstruction
+        """
+        super().__init__()
+
+        # Basic model parameters
+        self.input_dim = input_dim
+        self.output_dim = input_dim if output_dim is None else output_dim
+        self.depths = depths
+        self.dims = dims
+        self.img_size = img_size
+        self.fixed_task = fixed_task
+
+        self.dropout = dropout
+        
+        if dropout:
+            self.encoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
+            self.decoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
+            self.decoder_drop = 0.15
+            self.geo_dropout = 0.15
+            self.climate_dropout = 0.15
+        else:
+            self.encoder_drop_probs=None
+            self.decoder_drop_probs=None
+            self.decoder_drop = None
+            self.geo_dropout = 0.
+            self.climate_dropout = 0.
+        
+        self.activation = activation
+
+        # ---------------------
+        # 1) Stem
+        # ---------------------
+        # We will go from input_dim -> dims[0]
+        self.stem = CoreCNNBlock(
+            in_channels=self.input_dim,
+            out_channels=self.dims[0],
+            norm="group",
+            activation=activation,
+            residual=True
+        )
+
+        # ---------------------
+        # 2) Encoder
+        # ---------------------
+        # We'll create an encoder from dims[0] -> dims[1] -> dims[2] -> ...
+        # with the specified depths
+        self.encoder = FoundationEncoder(
+            input_dim=self.dims[0],
+            depths=self.depths,
+            dims=self.dims,  # we already consumed dims[0] in the stem
+            norm="group",
+            activation=activation,
+        )
+
+        # ---------------------
+        # Bridge
+        # ---------------------
+        # Typically we do a small bridging block at the bottom
+        # to let the model "breathe" in the bottleneck:
+        self.bridge = CoreCNNBlock(
+            in_channels=self.dims[-1],
+            out_channels=self.dims[-1],
+            norm="group",
+            activation=activation,
+            residual=True
+        )
+
+        # ---------------------
+        # 3) Decoder
+        # ---------------------
+        if self.fixed_task != 'coords':
+            # We decode from dims[-1] -> dims[-2] -> ... -> dims[0]
+            # The FoundationDecoder expects the same # of depths as dims it receives.
+            # Note: reversed(rev_dims) will go from highest to lowest
+            # but the FoundationDecoder build logic also does reversed() internally.
+            # So we pass them in the forward order, but it constructs them in reverse.
+            self.decoder = FoundationDecoder(
+                depths=self.depths,
+                dims=self.dims,
+                norm="group",
+                activation=activation,
+            )
+        else:
+            # If the only fixed task is coords, skip building a normal decoder
+            self.decoder = nn.Identity()
+
+
+        # ---------------------
+        # 4) Heads
+        # ---------------------
+        # 4.1 Reconstruction head
+        if self.fixed_task is None or self.fixed_task == "reconstruction":
+            # We'll produce self.output_dim channels (usually 3) 
+            # from the final decoder output (which is dims[0] channels).
+            self.head_recon = nn.Sequential(
+                CoreCNNBlock(
+                    in_channels=self.dims[0],
+                    out_channels=self.output_dim,
+                    norm="group",
+                    activation=activation,
+                    residual=True
+                ),
+                nn.Tanh(),  # Apply Tanh activation to be in [-1, 1] range
+                ScalingLayer(4)  # Scale by 4
+            )
+
+
+        else:
+            self.head_recon = nn.Identity()
+
+        # 4.2 Climate zone segmentation head (31 classes)
+        if self.fixed_task is None or self.fixed_task == "climate":
+            # segmentation as a global classification (B, 31) 
+            # so we do a global pooling => FC => 31 
+            self.head_seg = nn.Sequential(
+                nn.Linear(self.dims[-1] * 2, 128),
+                get_activation(activation),
+                *( [nn.Dropout(p=self.climate_dropout)] if self.climate_dropout > 0 else [] ),
+                nn.Linear(128, 31),
+            )
+        else:
+            self.head_seg = nn.Identity()
+
+        # 4.3 Geolocation head
+        # We'll do global pooling on the bottom feature map
+        # shape => (B, 2 * dims[-1]) => -> 128 => -> 4 => Tanh
+        if self.fixed_task is None or self.fixed_task == "coords":
+            self.head_geo = nn.Sequential(
+                nn.Linear(self.dims[-1] * 2, 128),
+                get_activation(activation),
+                *( [nn.Dropout(p=self.geo_dropout)] if self.geo_dropout > 0 else [] ),
+                nn.Linear(128, 4),
+                nn.Tanh()
+            )
+        else:
+            self.head_geo = nn.Identity()
+
+    def pool_feats(self, x):
+        """
+        Pools a 4D feature map (B, C, H, W) into a 1D (B, 2*C) vector
+        by concatenating global avg + global max. 
+        """
+        avg_pooled_feats = nn.AdaptiveAvgPool2d(1)(x)
+        max_pooled_feats = nn.AdaptiveMaxPool2d(1)(x)
+        combined_pooled_feats = torch.cat((avg_pooled_feats, max_pooled_feats), dim=1)
+        pooled_feats = combined_pooled_feats.view(combined_pooled_feats.size(0), -1)
+        return pooled_feats
+
+    def forward(self, x):
+        """
+        Args:
+            x: (B, input_dim, H, W) e.g. (B, 8, 128, 128)
+
+        Returns:
+            dict with keys: "coords", "climate", "reconstruction"
+        """
+        
+        # ---------------------
+        # 1) Stem
+        # ---------------------
+        # print(f"Input shape: {x.shape}, mean={x.mean().item():.3f}, max={x.max().item():.3f}")
+        x_stem = self.stem(x)  # (B, dims[0], H, W)
+        # print(f"Stem shape: {x_stem.shape}, mean={x_stem.mean().item():.3f}, max={x_stem.max().item():.3f}")
+
+
+        # ---------------------
+        # 2) Encoder
+        # ---------------------
+        bottom, skips = self.encoder(x_stem)
+        # print(f"Bottom shape: {bottom.shape}, mean={bottom.mean().item():.3f}, max={bottom.max().item():.3f}")
+        # bottom: (B, dims[-1], H//(2^num_stages), W//(2^num_stages))
+        # skips: list of intermediate features
+
+
+        # ---------------------
+        # 3) Bridge
+        # ---------------------
+        bottom_feats = self.bridge(bottom)
+        # print(f"Bridge shape: {bottom_feats.shape}, mean={bottom_feats.mean().item():.3f}, max={bottom_feats.max().item():.3f}")
+
+
+        # ---------------------
+        # 4) Decoder
+        # ---------------------
+        if self.fixed_task is None or self.fixed_task == "reconstruction":
+            decoded_feats = self.decoder(bottom_feats, skips)  # (B, dims[0], H, W)
+            # print(f"Decoded shape: {decoded_feats.shape}, mean={decoded_feats.mean().item():.3f}, max={decoded_feats.max().item():.3f}")  
+        else:
+            decoded_feats = None
+
+
+        # ---------------------
+        # 5) Task Heads
+        # ---------------------
+        pooled_feats = self.pool_feats(bottom_feats) # (B, 2*dims[-1])
+
+        # 5.1 Reconstruction
+        if self.fixed_task is None or self.fixed_task == "reconstruction":
+            reconstruction = self.head_recon(decoded_feats)  # (B, output_dim, H, W)
+        else:
+            reconstruction = None
+
+        # 5.2 Climate
+        if self.fixed_task is None or self.fixed_task == "climate":
+            climate_logits = self.head_seg(pooled_feats) # (B, 31)
+        else:
+            climate_logits = None
+
+        # 5.3 Geolocation
+        if self.fixed_task is None or self.fixed_task == "coords":
+            geo_pred = self.head_geo(pooled_feats)  # (B, 4)
+        else:
+            geo_pred = None
+
+
+        # ---------------------------------------
+        # Return dictionary
+        # ---------------------------------------
+        out_dict = {
+            "coords": geo_pred,                # (B, 4)
+            "climate": climate_logits,         # (B, 31, H, W) or (B, 31)
+            "reconstruction": reconstruction,  # (B, output_dim, H, W)
+        }
+
+        return out_dict
+
+
+
+
+
+class ScalingLayer(nn.Module):
+    def __init__(self, scale_factor):
+        super().__init__()
+        self.scale_factor = scale_factor
+
+    def forward(self, x):
+        return x * self.scale_factor
+
+
+
 # -----------------------------------------
 # ENCODER
 # -----------------------------------------
@@ -187,250 +449,6 @@ class FoundationDecoder(nn.Module):
         return x
 
 
-# -------------------------------------------------------------------
-# FOUNDATION MODEL
-# -------------------------------------------------------------------
-
-class phisat2net_geoaware(nn.Module):
-    def __init__(
-        self,
-        *,
-        input_dim=3,
-        output_dim=None,
-        depths=None,
-        dims=None,
-        img_size=128,
-        dropout=True,      # optional, not really used by the Core blocks
-        activation="gelu",
-        fixed_task=None,
-    ):
-        """
-        A U-Net-like model with extra heads for:
-          - climate zone classification
-          - geolocation
-          - zoom level
-          - reconstruction
-        """
-        super().__init__()
-
-        # Basic model parameters
-        self.input_dim = input_dim
-        self.output_dim = input_dim if output_dim is None else output_dim
-        self.depths = depths
-        self.dims = dims
-        self.img_size = img_size
-        self.fixed_task = fixed_task
-
-        self.dropout = dropout
-        
-        if dropout:
-            self.encoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
-            self.decoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
-            self.decoder_drop = 0.15
-            self.geo_dropout = 0.15
-            self.climate_dropout = 0.15
-        else:
-            self.encoder_drop_probs=None
-            self.decoder_drop_probs=None
-            self.decoder_drop = None
-            self.geo_dropout = 0.
-            self.climate_dropout = 0.
-        
-        self.activation = activation
-
-        # ---------------------
-        # 1) Stem
-        # ---------------------
-        # We will go from input_dim -> dims[0]
-        self.stem = CoreCNNBlock(
-            in_channels=self.input_dim,
-            out_channels=self.dims[0],
-            norm="group",
-            activation=activation,
-            residual=True
-        )
-
-        # ---------------------
-        # 2) Encoder
-        # ---------------------
-        # We'll create an encoder from dims[0] -> dims[1] -> dims[2] -> ...
-        # with the specified depths
-        self.encoder = FoundationEncoder(
-            input_dim=self.dims[0],
-            depths=self.depths,
-            dims=self.dims,  # we already consumed dims[0] in the stem
-            norm="group",
-            activation=activation,
-        )
-
-        # ---------------------
-        # Bridge
-        # ---------------------
-        # Typically we do a small bridging block at the bottom
-        # to let the model "breathe" in the bottleneck:
-        self.bridge = CoreCNNBlock(
-            in_channels=self.dims[-1],
-            out_channels=self.dims[-1],
-            norm="group",
-            activation=activation,
-            residual=True
-        )
-
-        # ---------------------
-        # 3) Decoder
-        # ---------------------
-        if self.fixed_task != 'coords':
-            # We decode from dims[-1] -> dims[-2] -> ... -> dims[0]
-            # The FoundationDecoder expects the same # of depths as dims it receives.
-            # Note: reversed(rev_dims) will go from highest to lowest
-            # but the FoundationDecoder build logic also does reversed() internally.
-            # So we pass them in the forward order, but it constructs them in reverse.
-            self.decoder = FoundationDecoder(
-                depths=self.depths,
-                dims=self.dims,
-                norm="group",
-                activation=activation,
-            )
-        else:
-            # If the only fixed task is coords, skip building a normal decoder
-            self.decoder = nn.Conv2d(4, 2, kernel_size=1)
-
-
-        # ---------------------
-        # 4) Heads
-        # ---------------------
-        # 4.1 Reconstruction head
-        if self.fixed_task is None or self.fixed_task == "reconstruction":
-            # We'll produce self.output_dim channels (usually 3) 
-            # from the final decoder output (which is dims[0] channels).
-            self.head_recon = nn.Sequential(
-                CoreCNNBlock(
-                    in_channels=self.dims[0],
-                    out_channels=self.output_dim,
-                    norm="group",
-                    activation=activation,
-                    residual=True
-                ),
-                nn.Sigmoid()  # optional final activation
-            )
-        else:
-            self.head_recon = nn.Conv2d(4, 2, kernel_size=1)  # dummy
-
-        # 4.2 Climate zone segmentation head (31 classes)
-        if self.fixed_task is None or self.fixed_task == "climate":
-            # segmentation as a global classification (B, 31) 
-            # so we do a global pooling => FC => 31 
-            self.head_seg = nn.Sequential(
-                nn.Linear(self.dims[-1] * 2, 128),
-                get_activation(activation),
-                *( [nn.Dropout(p=self.climate_dropout)] if self.climate_dropout > 0 else [] ),
-                nn.Linear(128, 31),
-            )
-        else:
-            self.head_seg = nn.Conv2d(4, 2, kernel_size=1)  # dummy
-
-        # 4.3 Geolocation head
-        # We'll do global pooling on the bottom feature map
-        # shape => (B, 2 * dims[-1]) => -> 128 => -> 4 => Tanh
-        if self.fixed_task is None or self.fixed_task == "coords":
-            self.head_geo = nn.Sequential(
-                nn.Linear(self.dims[-1] * 2, 128),
-                get_activation(activation),
-                *( [nn.Dropout(p=self.geo_dropout)] if self.geo_dropout > 0 else [] ),
-                nn.Linear(128, 4),
-                nn.Tanh()
-            )
-        else:
-            self.head_geo = nn.Conv2d(4, 2, kernel_size=1)  # dummy
-
-    def pool_feats(self, x):
-        """
-        Pools a 4D feature map (B, C, H, W) into a 1D (B, 2*C) vector
-        by concatenating global avg + global max. 
-        """
-        avg_pooled_feats = nn.AdaptiveAvgPool2d(1)(x)
-        max_pooled_feats = nn.AdaptiveMaxPool2d(1)(x)
-        combined_pooled_feats = torch.cat((avg_pooled_feats, max_pooled_feats), dim=1)
-        pooled_feats = combined_pooled_feats.view(combined_pooled_feats.size(0), -1)
-        return pooled_feats
-
-    def forward(self, x):
-        """
-        Args:
-            x: (B, input_dim, H, W) e.g. (B, 8, 128, 128)
-
-        Returns:
-            dict with keys: "coords", "climate", "reconstruction"
-        """
-        
-        # ---------------------
-        # 1) Stem
-        # ---------------------
-        # print(f"Input shape: {x.shape}, mean={x.mean().item():.3f}, max={x.max().item():.3f}")
-        x_stem = self.stem(x)  # (B, dims[0], H, W)
-        # print(f"Stem shape: {x_stem.shape}, mean={x_stem.mean().item():.3f}, max={x_stem.max().item():.3f}")
-
-
-        # ---------------------
-        # 2) Encoder
-        # ---------------------
-        bottom, skips = self.encoder(x_stem)
-        # print(f"Bottom shape: {bottom.shape}, mean={bottom.mean().item():.3f}, max={bottom.max().item():.3f}")
-        # bottom: (B, dims[-1], H//(2^num_stages), W//(2^num_stages))
-        # skips: list of intermediate features
-
-
-        # ---------------------
-        # 3) Bridge
-        # ---------------------
-        bottom_feats = self.bridge(bottom)
-        # print(f"Bridge shape: {bottom_feats.shape}, mean={bottom_feats.mean().item():.3f}, max={bottom_feats.max().item():.3f}")
-
-
-        # ---------------------
-        # 4) Decoder
-        # ---------------------
-        if self.fixed_task is None or self.fixed_task == "reconstruction":
-            decoded_feats = self.decoder(bottom_feats, skips)  # (B, dims[0], H, W)
-            # print(f"Decoded shape: {decoded_feats.shape}, mean={decoded_feats.mean().item():.3f}, max={decoded_feats.max().item():.3f}")  
-        else:
-            decoded_feats = None
-
-
-        # ---------------------
-        # 5) Task Heads
-        # ---------------------
-        pooled_feats = self.pool_feats(bottom_feats) # (B, 2*dims[-1])
-
-        # 5.1 Reconstruction
-        if self.fixed_task is None or self.fixed_task == "reconstruction":
-            reconstruction = self.head_recon(decoded_feats)  # (B, output_dim, H, W)
-        else:
-            reconstruction = None
-
-        # 5.2 Climate
-        if self.fixed_task is None or self.fixed_task == "climate":
-            climate_logits = self.head_seg(pooled_feats) # (B, 31)
-        else:
-            climate_logits = None
-
-        # 5.3 Geolocation
-        if self.fixed_task is None or self.fixed_task == "coords":
-            geo_pred = self.head_geo(pooled_feats)  # (B, 4)
-        else:
-            geo_pred = None
-
-
-        # ---------------------------------------
-        # Return dictionary
-        # ---------------------------------------
-        out_dict = {
-            "coords": geo_pred,                # (B, 4)
-            "climate": climate_logits,         # (B, 31, H, W) or (B, 31)
-            "reconstruction": reconstruction,  # (B, output_dim, H, W)
-        }
-
-        return out_dict
 
 
 

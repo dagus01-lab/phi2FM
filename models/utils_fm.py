@@ -29,7 +29,11 @@ class MultiTaskLoss(nn.Module):
             self.log_sigma_recon = nn.Parameter(torch.zeros(1, device=device)) # For reconstruction
             self.log_sigma_clim = nn.Parameter(torch.zeros(1, device=device)) # For climate
             self.log_sigma_geo = nn.Parameter(torch.zeros(1, device=device)) # For geolocation
-            
+            # If want them fixed:
+            # self.log_sigma_recon = torch.zeros(1, device=device) # For reconstruction
+            # self.log_sigma_clim = torch.zeros(1, device=device) # For climate
+            # self.log_sigma_geo = torch.zeros(1, device=device) # For geolocation
+
 
             # Initialize scales
             self.scale_recon = 1.
@@ -368,7 +372,7 @@ def get_phisat2_model(
         dims = [100, 200, 400, 800]
 
     elif model_size == 'small':         # Full mode: 635.31 MB -- Encoder: 185.63 MB
-        depths = [3, 3, 12, 3]
+        depths = [3, 3, 10, 3]
         dims = [104, 208, 416, 832]
     
     elif model_size == 'light':         # Full mode: 1130.5 MB -- Encoder: 368.39 MB
