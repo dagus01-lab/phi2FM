@@ -668,3 +668,91 @@ class phisat2net_uniphi_downstream(nn.Module):
         else:
             raise ValueError(f"Invalid task: {self.task}")
         return x
+
+
+
+
+
+
+
+def load_pretrained_model(
+    pretrained_path: str,
+    core_args: dict,
+    downstream_task: str = "classification",
+    downstream_output_dim: int = 10,
+    device: str = "cpu",
+):
+    """
+    Loads a pretrained phisat2net_uniphi model from `pretrained_path`
+    (which contains only `state_dict`, no config) and creates a 
+    phisat2net_uniphi_downstream with matching stem & encoder.
+
+    Args:
+        pretrained_path (str): Path to the .pt file with the pretrained state_dict.
+        core_args (dict): Dictionary specifying the essential architecture args, e.g.:
+            {
+                'input_dim': 8,
+                'img_size': 224,
+                'depths': [2, 2, 8, 2],
+                'dims': [80, 160, 320, 640]
+            }
+        downstream_task (str): "classification" or "segmentation".
+        downstream_output_dim (int): Number of classes or channels for the head.
+        device (str): "cpu" or "cuda" device.
+
+    Returns:
+        downstream_model (nn.Module): A phisat2net_uniphi_downstream model
+            with pretrained stem & encoder weights.
+    """
+
+    # 1. Load the state_dict from disk
+    checkpoint = torch.load(pretrained_path, map_location=device)
+    pretrained_state_dict = checkpoint["state_dict"]  # or directly checkpoint if it's just a dict
+
+    # 2. We must specify all necessary config arguments manually in `core_args`.
+    #    Provide defaults for others if needed (e.g., dropout, activation, etc.).
+    #    Example:
+    default_args = {
+        "output_dim": 8,
+        "dropout": True,
+        "activation": nn.GELU(),
+        "ov_compatiblity": True,
+        "apply_zoom": False,
+        "fixed_task": None,
+        "climate_segm": False,
+    }
+    # Merge user core_args with defaults
+    model_args = {**default_args, **core_args}
+
+    # 3. Instantiate the *upstream* model with these args
+    #    This must match the architecture of the original trained model.
+    upstream_model = phisat2net_uniphi(**model_args).to(device)
+
+    # 4. Load pretrained weights
+    upstream_model.load_state_dict(pretrained_state_dict, strict=True)
+    upstream_model.eval()
+
+    # 5. Create the *downstream* model, ensuring it has the same stem/encoder
+    #    architecture. For the "downstream" portion, you just specify the
+    #    classification or segmentation head.
+    downstream_model = phisat2net_uniphi_downstream(
+        input_dim=model_args["input_dim"],
+        output_dim=downstream_output_dim,
+        depths=model_args["depths"],
+        dims=model_args["dims"],
+        img_size=model_args["img_size"],
+        dropout=model_args["dropout"],
+        activation=model_args["activation"],
+        ov_compatiblity=model_args["ov_compatiblity"],
+        task=downstream_task,
+    ).to(device)
+
+    # 6. Copy the 'stem' and 'encoder' weights from the upstream model
+    downstream_model.stem.load_state_dict(upstream_model.stem.state_dict())
+    downstream_model.encoder.load_state_dict(upstream_model.encoder.state_dict())
+
+    return downstream_model
+
+
+
+
