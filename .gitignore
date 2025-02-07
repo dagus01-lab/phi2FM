@@ -22,3 +22,6 @@ github.pub
 # Ignore system-specific files
 .DS_Store
 Thumbs.db
+
+# Ignore .vscode folders
+.vscode/
