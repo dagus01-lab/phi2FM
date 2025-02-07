@@ -603,6 +603,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             model.load_state_dict(state_dict, strict=True)
 
     OUTPUT_FOLDER = f'{output_path}/{experiment_name}/{downstream_task}/{date.today().strftime("%d%m%Y")}_{NAME}_{downstream_task}'
+    print(f'Output folder: {OUTPUT_FOLDER}')
+
     # if lr_scheduler is not None:
     #     OUTPUT_FOLDER = f'{output_path}/{experiment_name}/{downstream_task}/{date.today().strftime("%d%m%Y")}_{NAME}_{downstream_task}_{lr_scheduler}'
 

@@ -16,6 +16,7 @@ github.pub
 # Ignore model checkpoints or large data files (if applicable)
 *.h5
 *.pth
+*.pt
 *.ckpt
 *.onnx
 
