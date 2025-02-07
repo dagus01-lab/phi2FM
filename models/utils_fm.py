@@ -135,7 +135,10 @@ class MultiTaskLoss(nn.Module):
 
         # Reconstruction Loss (Pixel-wise and Perceptual)
         if self.fixed_task is None or self.fixed_task == "reconstruction":
-            loss_recon = self.mse_loss(output["reconstruction"], labels["reconstruction"])
+            # loss_recon = self.mse_loss(output["reconstruction"], labels["reconstruction"])
+            mse_loss = (output["reconstruction"] - labels["reconstruction"]) ** 2
+            masked_mse = mse_loss * labels["erased_mask"]
+            loss_recon = masked_mse.sum() / (labels["erased_mask"].sum() + 1e-8)
             if self.perceptual_loss:
                 loss_perceptual = self.perceptual_loss(output["reconstruction"], labels["reconstruction"])
         

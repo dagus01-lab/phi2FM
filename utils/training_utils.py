@@ -8,34 +8,6 @@ import torch.nn as nn
 import torch.distributed as dist
 
 
-
-class SE_Block(nn.Module):
-    "credits: https://github.com/moskomule/senet.pytorch/blob/master/senet/se_module.py#L4"
-    def __init__(self, channels, reduction=16):
-        super().__init__()
-        self.reduction = reduction
-        self.squeeze = nn.AdaptiveAvgPool2d(1)
-        self.excitation = nn.Sequential(
-            nn.Linear(channels, max(1, channels // self.reduction), bias=False),
-            nn.GELU(),
-            nn.Linear(max(1, channels // self.reduction), channels, bias=False),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        bs, c, _, _ = x.shape
-        y = self.squeeze(x).view(bs, c)
-
-        if not torch.isfinite(y).all():
-            print("Found NaNs or Infs in squeeze output")
-
-        y = self.excitation(y).view(bs, c, 1, 1)
-
-        return x * y.expand_as(x)
-
-
-
-
 def get_activation(activation_name):
     if activation_name == "relu":
         return nn.ReLU6(inplace=False)

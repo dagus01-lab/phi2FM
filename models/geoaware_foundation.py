@@ -3,10 +3,9 @@ import torch.nn as nn
 
 from typing import List # need because using python 3.8
 
-from utils.training_utils import get_activation
 from .geoaware_blocks import CoreCNNBlock, CoreAttentionBlock
-from .util_tools import make_bilinear_upsample
-
+from .util_tools import make_bilinear_upsample, get_activation, get_normalization
+from .uniphi_blocks import CNNBlock, SimpleCNNBlock
 
 # -------------------------------------------------------------------
 # FOUNDATION MODEL
@@ -62,7 +61,6 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         # 1) Stem
         # ---------------------
-        # We will go from input_dim -> dims[0]
         self.stem = CoreCNNBlock(
             in_channels=self.input_dim,
             out_channels=self.dims[0],
@@ -74,12 +72,10 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         # 2) Encoder
         # ---------------------
-        # We'll create an encoder from dims[0] -> dims[1] -> dims[2] -> ...
-        # with the specified depths
         self.encoder = FoundationEncoder(
             input_dim=self.dims[0],
             depths=self.depths,
-            dims=self.dims,  # we already consumed dims[0] in the stem
+            dims=self.dims,
             norm="group",
             activation=activation,
         )
@@ -87,8 +83,6 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         # Bridge
         # ---------------------
-        # Typically we do a small bridging block at the bottom
-        # to let the model "breathe" in the bottleneck:
         self.bridge = CoreCNNBlock(
             in_channels=self.dims[-1],
             out_channels=self.dims[-1],
@@ -101,11 +95,6 @@ class phisat2net_geoaware(nn.Module):
         # 3) Decoder
         # ---------------------
         if self.fixed_task != 'coords':
-            # We decode from dims[-1] -> dims[-2] -> ... -> dims[0]
-            # The FoundationDecoder expects the same # of depths as dims it receives.
-            # Note: reversed(rev_dims) will go from highest to lowest
-            # but the FoundationDecoder build logic also does reversed() internally.
-            # So we pass them in the forward order, but it constructs them in reverse.
             self.decoder = FoundationDecoder(
                 depths=self.depths,
                 dims=self.dims,
@@ -113,7 +102,6 @@ class phisat2net_geoaware(nn.Module):
                 activation=activation,
             )
         else:
-            # If the only fixed task is coords, skip building a normal decoder
             self.decoder = nn.Identity()
 
 
@@ -122,34 +110,14 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         # 4.1 Reconstruction head
         if self.fixed_task is None or self.fixed_task == "reconstruction":
-            # We'll produce self.output_dim channels (usually 3) 
-            # from the final decoder output (which is dims[0] channels).
-            self.head_recon = nn.Sequential(
-                CoreCNNBlock(
-                    in_channels=self.dims[0],
-                    out_channels=self.output_dim,
-                    norm="group",
-                    activation=activation,
-                    residual=True
-                ),
-                nn.Tanh(),  # Apply Tanh activation to be in [-1, 1] range
-                ScalingLayer(4)  # Scale by 4
-            )
-
+            self.head_recon = nn.Conv2d(in_channels=self.dims[0], out_channels=self.output_dim, kernel_size=1)
 
         else:
             self.head_recon = nn.Identity()
 
         # 4.2 Climate zone segmentation head (31 classes)
         if self.fixed_task is None or self.fixed_task == "climate":
-            # segmentation as a global classification (B, 31) 
-            # so we do a global pooling => FC => 31 
-            self.head_seg = nn.Sequential(
-                nn.Linear(self.dims[-1] * 2, 128),
-                get_activation(activation),
-                *( [nn.Dropout(p=self.climate_dropout)] if self.climate_dropout > 0 else [] ),
-                nn.Linear(128, 31),
-            )
+            self.head_seg = nn.Linear(self.dims[-1], 31)
         else:
             self.head_seg = nn.Identity()
 
@@ -157,26 +125,16 @@ class phisat2net_geoaware(nn.Module):
         # We'll do global pooling on the bottom feature map
         # shape => (B, 2 * dims[-1]) => -> 128 => -> 4 => Tanh
         if self.fixed_task is None or self.fixed_task == "coords":
-            self.head_geo = nn.Sequential(
-                nn.Linear(self.dims[-1] * 2, 128),
-                get_activation(activation),
-                *( [nn.Dropout(p=self.geo_dropout)] if self.geo_dropout > 0 else [] ),
-                nn.Linear(128, 4),
-                nn.Tanh()
-            )
+            self.head_geo = nn.Linear(self.dims[-1], 4)
         else:
             self.head_geo = nn.Identity()
 
     def pool_feats(self, x):
         """
-        Pools a 4D feature map (B, C, H, W) into a 1D (B, 2*C) vector
-        by concatenating global avg + global max. 
+        Pools a 4D feature map (B, C, H, W) into a 1D vector (B, C)
+        using global average pooling.
         """
-        avg_pooled_feats = nn.AdaptiveAvgPool2d(1)(x)
-        max_pooled_feats = nn.AdaptiveMaxPool2d(1)(x)
-        combined_pooled_feats = torch.cat((avg_pooled_feats, max_pooled_feats), dim=1)
-        pooled_feats = combined_pooled_feats.view(combined_pooled_feats.size(0), -1)
-        return pooled_feats
+        return torch.flatten(nn.AdaptiveAvgPool2d(1)(x), 1)
 
     def forward(self, x):
         """
@@ -229,6 +187,7 @@ class phisat2net_geoaware(nn.Module):
         # 5.1 Reconstruction
         if self.fixed_task is None or self.fixed_task == "reconstruction":
             reconstruction = self.head_recon(decoded_feats)  # (B, output_dim, H, W)
+            # print(f"Reconstruction shape: {reconstruction.shape}, mean={reconstruction.mean().item():.3f}, max={reconstruction.max().item():.3f}")
         else:
             reconstruction = None
 
@@ -391,7 +350,6 @@ class CoreDecoderBlock(nn.Module):
 
         for i in range(self.depth):
             x = self.blocks[i](x)
-
         return x
 
 
@@ -534,7 +492,7 @@ class phisat2net_geoaware_downstream(nn.Module):
             out_channels=self.dims[-1],
             norm="batch",
             activation=activation,
-            residual=True
+            residual=False
         )
 
         # ---------------------

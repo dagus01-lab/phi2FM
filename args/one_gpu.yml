@@ -11,10 +11,10 @@ early_stop: 15
 epochs: 50
 input_channels: 8 # **********************************
 input_size: 224 # **********************************
-lr: 0.0001
+lr: 0.005
 lr_scheduler: cosine_annealing
 n_shot: null
-split_ratio: 0.3
+split_ratio: 1.0
 vis_val: True
 warmup: True
 warmup_steps: 5

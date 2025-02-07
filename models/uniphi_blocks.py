@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+from .util_tools import SE_Block
+
 
 class ChannelGLU(nn.Module):
     def __init__(self):
@@ -86,34 +88,6 @@ class ScaleSkip2D(nn.Module):
         return x + y
 
 
-class SE_Block(nn.Module):
-    "credits: https://github.com/moskomule/senet.pytorch/blob/master/senet/se_module.py#L4"
-    def __init__(self, channels, reduction=16):
-        super().__init__()
-        self.reduction = reduction
-        self.squeeze = nn.AdaptiveAvgPool2d(1)
-        self.excitation = nn.Sequential(
-            nn.Linear(channels, max(1, channels // self.reduction), bias=False),
-            nn.GELU(),
-            nn.Linear(max(1, channels // self.reduction), channels, bias=False),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        bs, c, _, _ = x.shape
-        y = self.squeeze(x).view(bs, c)
-
-        if not torch.isfinite(y).all():
-            print("Found NaNs or Infs in squeeze output")
-
-        y = self.excitation(y).view(bs, c, 1, 1)
-
-        return x * y.expand_as(x)
-
-
-
-
-
 
 class CNNBlock(nn.Module):
     """
@@ -172,7 +146,7 @@ class CNNBlock(nn.Module):
         self.reduction = reduction
         self.squeeze = SE_Block(self.channels_out, 16)
 
-        self.matcher = nn.Conv2d(self.channels_in, self.channels_out, 1, padding=0, bias=False) if self.channels_in != self.channels_out else None
+        self.matcher = nn.Conv2d(self.channels_in, self.channels_out, 1, padding=0, bias=False) if ((self.channels_in != self.channels_out) and residual) else None
 
         if self.chw is None:
             self.norm1 = nn.BatchNorm2d(self.channels_internal)
@@ -204,7 +178,8 @@ class CNNBlock(nn.Module):
             self.dropout_main = None
 
     def forward(self, x):
-        identity = x if self.matcher is None else self.matcher(x)
+        if self.residual:
+            identity = x if self.matcher is None else self.matcher(x)
         
         # print(" ")
         # init_x = x.mean().item()
@@ -229,7 +204,66 @@ class CNNBlock(nn.Module):
             x = self.scaler(x, identity)
 
         x = self.activation_out(x)
-        
-        # print(f"{init_x:.16f} -- After Conv: Min={x.min().item()} Max={x.max().item()} Mean={x.mean().item()} NaNs={torch.isnan(x).sum().item()}")
+        return x
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+class SimpleCNNBlock(nn.Module):
+
+    def __init__(
+        self,
+        channels_in,
+        channels_out=None,
+        activation=nn.GELU(),
+        activation_out=nn.Identity(),
+        residual=True,
+        chw=None,
+    ):
+        super().__init__()
+
+        self.channels_in = channels_in
+        self.channels_out = channels_in if channels_out is None else channels_out
+        self.channels_internal = self.channels_out
+        self.activation = activation
+        self.activation_out = activation if activation_out is None else activation_out
+        self.residual = residual
+        # self.squeeze = SE_Block(self.channels_out, 16)
+
+        self.matcher = nn.Conv2d(self.channels_in, self.channels_out, 1, padding=0, bias=False) if ((self.channels_in != self.channels_out) and residual) else None
+
+        self.norm1 = nn.BatchNorm2d(self.channels_internal)
+        self.norm2 = nn.BatchNorm2d(self.channels_internal)
+
+        self.conv1 = nn.Conv2d(self.channels_in, self.channels_internal, 1, padding=0, bias=False)
+        self.conv2 = nn.Conv2d(self.channels_internal, self.channels_internal, 3, padding=1, bias=False, padding_mode="replicate")
+        # self.conv3 = nn.Conv2d(self.channels_internal, self.channels_out, 1, padding=0, bias=True)
+
+        self.scaler = ScaleSkip2D(self.channels_out) if self.residual else None
+
+    def forward(self, x):
+        if self.residual:
+            identity = x if self.matcher is None else self.matcher(x)
+
+        x = self.activation(self.norm1(self.conv1(x)))
+        x = (self.norm2(self.conv2(x)))
+
+        # x = self.conv3(x)
+        # x = self.squeeze(x)
+
+        if self.residual:
+            x = self.scaler(x, identity)
+
+        x = self.activation_out(x)
+        
         return x

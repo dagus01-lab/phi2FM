@@ -15,6 +15,275 @@ def get_stage_norm(spatial_size, norm_size_threshold):
         return 'layer'  # Stable for small sizes
 
 
+
+# -------------------------------------------------------------------
+# The combined multi-task model
+# -------------------------------------------------------------------
+class phisat2net_uniphi(nn.Module):
+    def __init__(
+        self,
+        *,
+        input_dim=3,
+        output_dim=None,
+        depths=None,
+        dims=None,
+        img_size=128,
+        dropout=True,
+        activation=nn.GELU(),
+        ov_compatiblity=False,
+        apply_zoom=False,
+        fixed_task=None,
+        climate_segm=False,
+    ):
+        """
+        A U-Net-like model with extra heads for:
+          - climate zone segmentation
+          - geolocation
+          - zoom level
+          - reconstruction
+        """
+        super().__init__()
+
+        self.input_dim = input_dim
+        self.output_dim = input_dim if output_dim is None else output_dim
+        self.depths = depths
+        self.dims = dims
+        self.img_size = img_size
+        self.apply_zoom = apply_zoom
+        self.fixed_task = fixed_task
+        self.climate_segm = climate_segm
+
+        self.dropout = dropout
+        
+        if dropout:
+            self.encoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
+            self.decoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
+            self.decoder_drop = 0.15
+            self.geo_dropout = 0.15
+            self.climate_dropout = 0.15
+        else:
+            self.encoder_drop_probs=None
+            self.decoder_drop_probs=None
+            self.decoder_drop = None
+            self.geo_dropout = 0.
+            self.climate_dropout = 0.
+        
+        self.activation = activation
+        self.channel_activation = ChannelGLU()
+
+        # Stem
+        self.stem = CNNBlock(
+            channels_in=input_dim,
+            channels_out=dims[0],
+            chw=None,
+            activation=self.activation,
+        )
+
+        # Encoder (no flattening)
+        self.encoder = FoundationEncoder(
+            input_dim=dims[0],
+            depths=depths,
+            dims=dims,
+            img_size=img_size,
+            activation=self.channel_activation,  # or self.activation
+            encoder_drop_probs=self.encoder_drop_probs,
+            norm='batch_layer',
+        )
+
+        # Decoder
+        if fixed_task != 'coords':
+            self.decoder = FoundationDecoder(
+                depths=depths[::-1],
+                dims=dims[::-1],
+                img_size=img_size,
+                dropout=dropout,
+                activation=self.channel_activation,  # or self.activation
+                ov_compatiblity=ov_compatiblity,
+                decoder_drop_probs=self.decoder_drop_probs,
+                norm='batch_layer',
+            )
+        else:
+            self.decoder = nn.Conv2d(4, 2, kernel_size=1)
+
+        # HEADS
+        
+        # 1) Reconstruction head
+        if self.fixed_task is None or self.fixed_task == "reconstruction":
+            self.head_recon = CNNBlock(
+                channels_in=self.dims[0],
+                channels_out=self.output_dim,
+                chw=[self.output_dim, self.img_size, self.img_size],
+                activation=self.activation,
+                activation_out=nn.Sigmoid(),  # or None, depending on your use-case
+                residual=True,
+            )
+        else:
+            self.head_recon = nn.Conv2d(4, 2, kernel_size=1)
+
+        # 2) Climate zone segmentation head (31 classes)
+        if self.fixed_task is None or self.fixed_task == "climate":
+            if self.climate_segm:
+                head_seg_channels = [self.dims[0], 128, 256, 128, 31]
+                self.head_seg = nn.Sequential(
+                    *[
+                        CNNBlock(
+                            channels_in=head_seg_channels[i],
+                            channels_out=head_seg_channels[i + 1],
+                            chw=None,
+                            activation=self.activation,
+                            activation_out=nn.Identity() if i == len(head_seg_channels) - 2 else None,
+                            drop_prob_main=0.0 if i == len(head_seg_channels) - 2 else self.climate_dropout,
+                        )
+                        for i in range(len(head_seg_channels) - 1)
+                    ]
+                )
+            else:
+                self.head_seg = nn.Sequential(
+                    nn.Linear(self.dims[-1]  * 2, 128),
+                    self.activation,
+                    *([] if self.climate_dropout == 0 else [nn.Dropout(p=self.climate_dropout)]),
+                    nn.Linear(128, 31),
+                )
+
+        else:
+            self.head_seg = nn.Conv2d(4, 2, kernel_size=1)
+
+        # 3) Geolocation head (latitude, sin(lon), cos(lon), optional extra?)
+        #    We'll pool the final encoder features globally to get (B, C).
+        if self.fixed_task is None or self.fixed_task == "coords":
+            self.head_geo = nn.Sequential(
+                nn.Linear(self.dims[-1]  * 2, 128),
+                self.activation,
+                *([] if self.geo_dropout == 0 else [nn.Dropout(p=self.geo_dropout)]),
+                nn.Linear(128, 4),
+                nn.Tanh()
+            )
+        else:
+            self.head_geo = nn.Conv2d(4, 2, kernel_size=1)
+
+        # 4) Zoom level head (single scalar)
+        if self.apply_zoom:
+            self.head_zoom = nn.Sequential(
+                nn.Linear(self.dims[-1] * 2, 64),
+                self.activation,
+                nn.Linear(64, 1)
+            )
+
+    def pool_feats(self, x):
+        avg_pooled_feats = nn.AdaptiveAvgPool2d(1)(x)  # Shape: (B, C, 1, 1)
+        max_pooled_feats = nn.AdaptiveMaxPool2d(1)(x)  # Shape: (B, C, 1, 1)
+
+        combined_pooled_feats = torch.cat((avg_pooled_feats, max_pooled_feats), dim=1)  # Shape: (B, 2*C, 1, 1)
+        pooled_feats = combined_pooled_feats.view(combined_pooled_feats.size(0), -1)  # Shape: (B, 2*C)
+        return pooled_feats
+
+    def create_dummy_tensor(self, B, C, H, W, device=None):
+        dummy = torch.zeros(B, C, H, W, device=device)
+        half = H // 2
+        dummy[:, 0, :half, :] = 10.0
+        dummy[:, 1, half:, :] = 10.0
+        return dummy
+
+    def forward(self, x, print_outs = False):
+        """
+        Args:
+            x: (B, 8, 128, 128)
+        Returns:
+            dict of tasks:
+              coords -> (B, 4)
+              climate -> (B, 31, 128, 128)
+              zoom_factor -> (B, 1)
+              reconstruction -> (B, 3, 128, 128)
+        """
+        # Stem
+        x = self.stem(x)  # (B, dims[0], H, W)
+
+        # Encoder
+        bottom_feats, skips = self.encoder(x)
+        # bottom_feats shape: (B, dims[-1], H_enc, W_enc)
+        # H_enc, W_enc = 128 / 2^(steps-1) if each stage does 2x downsample
+
+        # Global average pooling for geolocation / zoom
+        # This yields (B, dims[-1])
+        # pooled_feats = bottom_feats.mean(dim=(2, 3))  # global average across spatial dims
+        pooled_feats = self.pool_feats(bottom_feats)
+
+        # Heads for global tasks
+        if self.fixed_task is None or self.fixed_task == "coords":
+            geo_pred = self.head_geo(pooled_feats)  # (B, 4)
+        else:
+            # geo_pred = torch.zeros(x.size(0), 4, device=x.device)
+            geo_pred = None
+
+        # Decoder
+        if self.fixed_task is None or self.fixed_task in ["reconstruction", "climate"]:
+            decoded_feats = self.decoder(bottom_feats, skips)  # (B, dims[0], 128, 128)
+        else:
+            decoded_feats = None
+
+        # Reconstruction
+        if self.fixed_task is None or self.fixed_task == "reconstruction":
+            reconstruction = self.head_recon(decoded_feats)  # (B, output_dim, 128, 128)
+        else:
+            # reconstruction = torch.zeros(x.size(0), self.output_dim, self.img_size, self.img_size, device=x.device)
+            reconstruction = None
+
+        # Climate
+        if self.fixed_task is None or self.fixed_task == "climate":
+            if self.climate_segm:
+                climate_logits = self.head_seg(decoded_feats)  # (B, 31, 128, 128)
+            else:
+                climate_logits = self.head_seg(pooled_feats)
+        else:
+            # climate_logits = self.create_dummy_tensor(x.size(0), 31, self.img_size, self.img_size, device=x.device)
+            climate_logits = None
+        
+        if print_outs: 
+            outputs = [
+                ("stem out", x.shape, x.mean(), x.std(), x.min(), x.max()),
+                ("encoder out", bottom_feats.shape, bottom_feats.mean(), bottom_feats.std(), bottom_feats.min(), bottom_feats.max()),
+                ("pool out", pooled_feats.shape, pooled_feats.mean(), pooled_feats.std(), pooled_feats.min(), pooled_feats.max()),
+                ("coords out", geo_pred.shape, geo_pred.mean(), geo_pred.std(), geo_pred.min(), geo_pred.max()),
+                ("decoder out", decoded_feats.shape, decoded_feats.mean(), decoded_feats.std(), decoded_feats.min(), decoded_feats.max()),
+                ("reconstruction out", reconstruction.shape, reconstruction.mean(), reconstruction.std(), reconstruction.min(), reconstruction.max()),
+                ("climate out", climate_logits.shape, climate_logits.mean(), climate_logits.std(), climate_logits.min(), climate_logits.max()),
+            ]
+
+            # Prepare data for tabulate
+            table_data = []
+            for name, shape, mean, std, min_, max_ in outputs:
+                table_data.append([
+                    name,
+                    str(shape),
+                    f"{mean:.3e}",
+                    f"{std:.3e}",
+                    f"{min_:.3e} - {max_:.3e}"
+                ])
+
+            # Table headers
+            headers = ["Layer", "Shape", "Mean", "Std Dev", "Min - Max"]
+            print(tabulate(table_data, headers=headers, tablefmt="grid", floatfmt=".3e"))
+
+        if self.apply_zoom:
+            raise NotImplementedError('While the zoom task is implemented, it should not be used in this model')
+            zoom_pred = self.head_zoom(pooled_feats) # (B, 1)
+
+            return {
+                "coords": geo_pred,              # (B, 4)
+                "climate": climate_logits,       # (B, 31, 128, 128)
+                "zoom_factor": zoom_pred,        # (B, 1)
+                "reconstruction": reconstruction # (B, 8, 128, 128)
+            }
+        else:
+            return {
+                "coords": geo_pred,              # (B, 4)
+                "climate": climate_logits,       # (B, 31, 128, 128)
+                "reconstruction": reconstruction # (B, 8, 128, 128)
+            }
+
+
+
+
 # -------------------------------------------------------------------
 # FoundationEncoder without flattening
 # -------------------------------------------------------------------
@@ -262,271 +531,6 @@ class FoundationDecoder(nn.Module):
 
         x = self.prehead_norm(x)
         return x
-
-
-# -------------------------------------------------------------------
-# The combined multi-task model
-# -------------------------------------------------------------------
-class phisat2net_uniphi(nn.Module):
-    def __init__(
-        self,
-        *,
-        input_dim=3,
-        output_dim=None,
-        depths=None,
-        dims=None,
-        img_size=128,
-        dropout=True,
-        activation=nn.GELU(),
-        ov_compatiblity=False,
-        apply_zoom=False,
-        fixed_task=None,
-        climate_segm=False,
-    ):
-        """
-        A U-Net-like model with extra heads for:
-          - climate zone segmentation
-          - geolocation
-          - zoom level
-          - reconstruction
-        """
-        super().__init__()
-
-        self.input_dim = input_dim
-        self.output_dim = input_dim if output_dim is None else output_dim
-        self.depths = depths
-        self.dims = dims
-        self.img_size = img_size
-        self.apply_zoom = apply_zoom
-        self.fixed_task = fixed_task
-        self.climate_segm = climate_segm
-
-        self.dropout = dropout
-        
-        if dropout:
-            self.encoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
-            self.decoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
-            self.decoder_drop = 0.15
-            self.geo_dropout = 0.15
-            self.climate_dropout = 0.15
-        else:
-            self.encoder_drop_probs=None
-            self.decoder_drop_probs=None
-            self.decoder_drop = None
-            self.geo_dropout = 0.
-            self.climate_dropout = 0.
-        
-        self.activation = activation
-        self.channel_activation = ChannelGLU()
-
-        # Stem
-        self.stem = CNNBlock(
-            channels_in=input_dim,
-            channels_out=dims[0],
-            chw=None,
-            activation=self.activation,
-        )
-
-        # Encoder (no flattening)
-        self.encoder = FoundationEncoder(
-            input_dim=dims[0],
-            depths=depths,
-            dims=dims,
-            img_size=img_size,
-            activation=self.channel_activation,  # or self.activation
-            encoder_drop_probs=self.encoder_drop_probs,
-            norm='batch_layer',
-        )
-
-        # Decoder
-        if fixed_task != 'coords':
-            self.decoder = FoundationDecoder(
-                depths=depths[::-1],
-                dims=dims[::-1],
-                img_size=img_size,
-                dropout=dropout,
-                activation=self.channel_activation,  # or self.activation
-                ov_compatiblity=ov_compatiblity,
-                decoder_drop_probs=self.decoder_drop_probs,
-                norm='batch_layer',
-            )
-        else:
-            self.decoder = nn.Conv2d(4, 2, kernel_size=1)
-
-        # HEADS
-        
-        # 1) Reconstruction head
-        if self.fixed_task is None or self.fixed_task == "reconstruction":
-            self.head_recon = CNNBlock(
-                channels_in=self.dims[0],
-                channels_out=self.output_dim,
-                chw=[self.output_dim, self.img_size, self.img_size],
-                activation=self.activation,
-                activation_out=nn.Sigmoid(),  # or None, depending on your use-case
-            )
-        else:
-            self.head_recon = nn.Conv2d(4, 2, kernel_size=1)
-
-        # 2) Climate zone segmentation head (31 classes)
-        if self.fixed_task is None or self.fixed_task == "climate":
-            if self.climate_segm:
-                head_seg_channels = [self.dims[0], 128, 256, 128, 31]
-                self.head_seg = nn.Sequential(
-                    *[
-                        CNNBlock(
-                            channels_in=head_seg_channels[i],
-                            channels_out=head_seg_channels[i + 1],
-                            chw=None,
-                            activation=self.activation,
-                            activation_out=nn.Identity() if i == len(head_seg_channels) - 2 else None,
-                            drop_prob_main=0.0 if i == len(head_seg_channels) - 2 else self.climate_dropout,
-                        )
-                        for i in range(len(head_seg_channels) - 1)
-                    ]
-                )
-            else:
-                self.head_seg = nn.Sequential(
-                    nn.Linear(self.dims[-1]  * 2, 128),
-                    self.activation,
-                    *([] if self.climate_dropout == 0 else [nn.Dropout(p=self.climate_dropout)]),
-                    nn.Linear(128, 31),
-                )
-
-        else:
-            self.head_seg = nn.Conv2d(4, 2, kernel_size=1)
-
-        # 3) Geolocation head (latitude, sin(lon), cos(lon), optional extra?)
-        #    We'll pool the final encoder features globally to get (B, C).
-        if self.fixed_task is None or self.fixed_task == "coords":
-            self.head_geo = nn.Sequential(
-                nn.Linear(self.dims[-1]  * 2, 128),
-                self.activation,
-                *([] if self.geo_dropout == 0 else [nn.Dropout(p=self.geo_dropout)]),
-                nn.Linear(128, 4),
-                nn.Tanh()
-            )
-        else:
-            self.head_geo = nn.Conv2d(4, 2, kernel_size=1)
-
-        # 4) Zoom level head (single scalar)
-        if self.apply_zoom:
-            self.head_zoom = nn.Sequential(
-                nn.Linear(self.dims[-1] * 2, 64),
-                self.activation,
-                nn.Linear(64, 1)
-            )
-
-    def pool_feats(self, x):
-        avg_pooled_feats = nn.AdaptiveAvgPool2d(1)(x)  # Shape: (B, C, 1, 1)
-        max_pooled_feats = nn.AdaptiveMaxPool2d(1)(x)  # Shape: (B, C, 1, 1)
-
-        combined_pooled_feats = torch.cat((avg_pooled_feats, max_pooled_feats), dim=1)  # Shape: (B, 2*C, 1, 1)
-        pooled_feats = combined_pooled_feats.view(combined_pooled_feats.size(0), -1)  # Shape: (B, 2*C)
-        return pooled_feats
-
-    def create_dummy_tensor(self, B, C, H, W, device=None):
-        dummy = torch.zeros(B, C, H, W, device=device)
-        half = H // 2
-        dummy[:, 0, :half, :] = 10.0
-        dummy[:, 1, half:, :] = 10.0
-        return dummy
-
-    def forward(self, x, print_outs = False):
-        """
-        Args:
-            x: (B, 8, 128, 128)
-        Returns:
-            dict of tasks:
-              coords -> (B, 4)
-              climate -> (B, 31, 128, 128)
-              zoom_factor -> (B, 1)
-              reconstruction -> (B, 3, 128, 128)
-        """
-        # Stem
-        x = self.stem(x)  # (B, dims[0], H, W)
-
-        # Encoder
-        bottom_feats, skips = self.encoder(x)
-        # bottom_feats shape: (B, dims[-1], H_enc, W_enc)
-        # H_enc, W_enc = 128 / 2^(steps-1) if each stage does 2x downsample
-
-        # Global average pooling for geolocation / zoom
-        # This yields (B, dims[-1])
-        # pooled_feats = bottom_feats.mean(dim=(2, 3))  # global average across spatial dims
-        pooled_feats = self.pool_feats(bottom_feats)
-
-        # Heads for global tasks
-        if self.fixed_task is None or self.fixed_task == "coords":
-            geo_pred = self.head_geo(pooled_feats)  # (B, 4)
-        else:
-            # geo_pred = torch.zeros(x.size(0), 4, device=x.device)
-            geo_pred = None
-
-        # Decoder
-        if self.fixed_task is None or self.fixed_task in ["reconstruction", "climate"]:
-            decoded_feats = self.decoder(bottom_feats, skips)  # (B, dims[0], 128, 128)
-        else:
-            decoded_feats = None
-
-        # Reconstruction
-        if self.fixed_task is None or self.fixed_task == "reconstruction":
-            reconstruction = self.head_recon(decoded_feats)  # (B, output_dim, 128, 128)
-        else:
-            # reconstruction = torch.zeros(x.size(0), self.output_dim, self.img_size, self.img_size, device=x.device)
-            reconstruction = None
-
-        # Climate
-        if self.fixed_task is None or self.fixed_task == "climate":
-            if self.climate_segm:
-                climate_logits = self.head_seg(decoded_feats)  # (B, 31, 128, 128)
-            else:
-                climate_logits = self.head_seg(pooled_feats)
-        else:
-            # climate_logits = self.create_dummy_tensor(x.size(0), 31, self.img_size, self.img_size, device=x.device)
-            climate_logits = None
-        
-        if print_outs: 
-            outputs = [
-                ("stem out", x.shape, x.mean(), x.std(), x.min(), x.max()),
-                ("encoder out", bottom_feats.shape, bottom_feats.mean(), bottom_feats.std(), bottom_feats.min(), bottom_feats.max()),
-                ("pool out", pooled_feats.shape, pooled_feats.mean(), pooled_feats.std(), pooled_feats.min(), pooled_feats.max()),
-                ("coords out", geo_pred.shape, geo_pred.mean(), geo_pred.std(), geo_pred.min(), geo_pred.max()),
-                ("decoder out", decoded_feats.shape, decoded_feats.mean(), decoded_feats.std(), decoded_feats.min(), decoded_feats.max()),
-                ("reconstruction out", reconstruction.shape, reconstruction.mean(), reconstruction.std(), reconstruction.min(), reconstruction.max()),
-                ("climate out", climate_logits.shape, climate_logits.mean(), climate_logits.std(), climate_logits.min(), climate_logits.max()),
-            ]
-
-            # Prepare data for tabulate
-            table_data = []
-            for name, shape, mean, std, min_, max_ in outputs:
-                table_data.append([
-                    name,
-                    str(shape),
-                    f"{mean:.3e}",
-                    f"{std:.3e}",
-                    f"{min_:.3e} - {max_:.3e}"
-                ])
-
-            # Table headers
-            headers = ["Layer", "Shape", "Mean", "Std Dev", "Min - Max"]
-            print(tabulate(table_data, headers=headers, tablefmt="grid", floatfmt=".3e"))
-
-        if self.apply_zoom:
-            raise NotImplementedError('While the zoom task is implemented, it should not be used in this model')
-            zoom_pred = self.head_zoom(pooled_feats) # (B, 1)
-
-            return {
-                "coords": geo_pred,              # (B, 4)
-                "climate": climate_logits,       # (B, 31, 128, 128)
-                "zoom_factor": zoom_pred,        # (B, 1)
-                "reconstruction": reconstruction # (B, 8, 128, 128)
-            }
-        else:
-            return {
-                "coords": geo_pred,              # (B, 4)
-                "climate": climate_logits,       # (B, 31, 128, 128)
-                "reconstruction": reconstruction # (B, 8, 128, 128)
-            }
 
 
 

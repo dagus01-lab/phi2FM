@@ -103,6 +103,9 @@ class TransformX:
         # 3. Normalize to zero mean and unit variance (per channel).
         x_np = (x_np - self.means) / self.stds
 
+        # # 3. Normalize to the 0-1 range using min_scaling and max_scaling.
+        # x_np = (x_np - self.min_scaling) / (self.max_scaling - self.min_scaling)
+
         return x_np
 
 
@@ -169,17 +172,15 @@ class LmdbDataset(Dataset):
 
 
     def numpy_zero_to_noise(self, image_np):
+    # def numpy_zero_to_channel_mean(self, image_np):
         """
         Applies random erasing transformations (augment_drop) to the combined image and a white image to identify erased areas.
-        Then replaces the erased areas in the original image with noise.
+        Then replaces the erased areas in the original image with the per-channel mean.
 
         image_np: (C, H, W) NumPy array
         """
-        mean_val = image_np.mean()
-        std_val = image_np.std() + 1e-6
-
-        noise = np.random.normal(mean_val, std_val, size=image_np.shape)
-        noise = np.clip(noise, image_np.min(), image_np.max())
+        # Compute per-channel mean
+        channel_means = image_np.mean(axis=(1, 2), keepdims=True)  # Shape: (C, 1, 1)
 
         # Create a white image
         white = np.ones_like(image_np)
@@ -197,10 +198,10 @@ class LmdbDataset(Dataset):
         # Identify erased areas in the white image part
         erased_mask = (dropped[C:2*C, :, :] == 0)
 
-        # Replace erased areas in the original with noise
-        reconstructed = np.where(erased_mask, noise, dropped[:C, :, :])
+        # Replace erased areas in the original image with the per-channel mean
+        reconstructed = np.where(erased_mask, channel_means, dropped[:C, :, :])
 
-        return reconstructed
+        return reconstructed, erased_mask
     
     def np_to_tensor(self, np_x, dtype=torch.float32):
         np_x = np.copy(np_x)
@@ -224,7 +225,7 @@ class LmdbDataset(Dataset):
         y_coords = np.frombuffer(coords_data, dtype=np.float64)
         y_climate = np.frombuffer(climate_data, dtype=np.uint8)[0]
 
-        y = {'coords': None, 'climate': None, 'reconstruction': None}
+        y = {'coords': None, 'climate': None, 'reconstruction': None, 'erased_mask': None}
 
         # ---------------------------
         # Transform X
@@ -249,8 +250,9 @@ class LmdbDataset(Dataset):
         # ---------------------------
         if (self.fixed_task is None or self.fixed_task == 'reconstruction') and self.augment_drop is not None:
             x_original = x.copy()
-            x = self.numpy_zero_to_noise(x)
+            x, erased = self.numpy_zero_to_noise(x)
             y['reconstruction'] = self.np_to_tensor(x_original)
+            y['erased_mask'] = self.np_to_tensor(erased)
 
         x_torch = self.np_to_tensor(x)
         return x_torch, y

@@ -1,17 +1,19 @@
 import torch
 import torch.nn as nn
-from utils.training_utils import get_activation, get_normalization, SE_Block
+from .util_tools import SE_Block, get_activation, get_normalization
 
 
 class CoreCNNBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, *, norm="batch", activation="relu", residual=True):
+    def __init__(self, in_channels, out_channels, *, norm="batch", 
+                 activation="relu", residual=True, activation_out=None):
         super(CoreCNNBlock, self).__init__()
         
         self.activation = get_activation(activation)
+        self.activation_out = self.activation if activation_out is None else get_activation(activation_out)
         self.residual = residual
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.squeeze = SE_Block(self.out_channels)
+        self.squeeze = SE_Block(self.out_channels, 16)
 
         # Conv1: 1x1 convolution never needs padding
         self.conv1 = nn.Conv2d(self.in_channels, self.out_channels, kernel_size=1, padding=0)
@@ -23,7 +25,8 @@ class CoreCNNBlock(nn.Module):
         
         # Conv3: Regular 3x3 conv needs padding=1 to maintain size
         self.conv3 = nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, padding=1,  groups=1)
-        self.norm3 = get_normalization(norm, self.out_channels)
+        # self.norm3 = get_normalization(norm, self.out_channels)
+        self.norm3 = nn.Identity()
 
         # 4th layer: Residual
         if self.residual:
@@ -52,7 +55,7 @@ class CoreCNNBlock(nn.Module):
             # print(f'x mean: {x.mean().item():.3f}, x max: {x.max().item():.3f}, identity mean: {identity.mean().item():.3f}, identity max: {identity.max().item():.3f}')
             x = x + self.match_channels(identity)
 
-        x = self.activation(x)
+        x = self.activation_out(x)
         return x
 
 
