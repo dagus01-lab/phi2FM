@@ -1,12 +1,9 @@
 import os
-import pdb
-import shutil
 import yaml
 
 import torch
 # torch.autograd.detect_anomaly(check_nan=True)
 
-from functools import partial
 from torchinfo import summary
 
 import numpy as np
@@ -15,14 +12,8 @@ import random
 import torch.nn as nn
 from datetime import date
 import argparse
-import sys; sys.path.append("../")
-
-
-# DDP
-import tempfile
-import torch.distributed as dist
-import torch.optim as optim
-import torch.multiprocessing as mp
+# import sys; sys.path.append("../")
+import sys; sys.path.append('/home/ccollado/phi2FM/pretrain/models')
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -36,7 +27,7 @@ from models.model_CoreCNN_versions import CoreUnet_nano, CoreUnet_tiny, CoreUnet
 from models.model_Mixer_versions import Mixer_nano, Mixer_tiny, Mixer_base, Mixer_large, Mixer_huge
 from models.model_LinearViT_versions import LinearViT_base, LinearViT_large, LinearViT_huge
 from models.model_AutoEncoderViT_versions import AutoencoderViT_base, AutoencoderViT_large, AutoencoderViT_huge
-from models.model_GeoAwarePretrained import MixerGeoPretrained, get_mixer_kwargs, get_core_encoder_kwargs, CoreEncoderGeoPretrained, CoreEncoderGeoPretrained_combined, CoreEncoderGeoAutoEncoder, CoreEncoderGeoPretrainedFM4T
+from models.model_GeoAwarePretrained import MixerGeoPretrained, get_mixer_kwargs, get_core_encoder_kwargs, CoreEncoderGeoPretrained, CoreEncoderGeoPretrained_combined, CoreEncoderGeoAutoEncoder
 from models.model_GeoAwarePretrained_classifier import CoreEncoderGeoPretrained_Classifier
 from models.model_AutoEncoderViTPretrained import vit_cnn, vit_cnn_gc, vit_large, get_core_decoder_kwargs
 from models.model_AutoEncoderViTPretrained_wSkip import vit_cnn_wSkip, vit_cnn_gc_wSkip, vit_large_wSkip
@@ -48,9 +39,10 @@ from models.model_Seco import seasonal_contrast
 from models.model_Resnet50 import resnet
 from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor
 
-from models.model_foundation.model_foundation_local_rev2 import get_phisat2_model, pretrained_phisat2_downstream, load_pretrained_model
-from models.model_foundation.blocks import CNNBlock
-from models.model_CoreCNN import CoreCNNBlock, CoreEncoder
+# from models.model_foundation.model_foundation_local_rev2 import get_phisat2_model, pretrained_phisat2_downstream, load_pretrained_model
+from utils_fm import get_phisat2_model
+from models.phisatnet.phisatnet_downstream import phisatnet_downstream
+
 
 from utils import data_protocol
 from utils import load_data
@@ -75,13 +67,13 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        'GeoAware_core_autoencoder_nano', 'seasonal_contrast',
                        'GeoAware_core_nano_classifier', 'GeoAware_contrastive_core_nano_classifier',
                        'GeoAware_mh_pred_core_nano_classifier', 'seasonal_contrast_classifier',
-                       'phileo_precursor', 'phisat2_Classifier', 'phisat2_Segmentation'
+                       'phileo_precursor', 'phisatnet', 'phisatnet_classifier'
                        ]
 
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
                            'vit_cnn_classifier', 'prithvi_classifier', 'vit_cnn_wSkip', 'vit_cnn_gc_wSkip']
 
-MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisat2_Segmentation', 'phisat2_Classification']
+MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier']
 MODELS_224_r30 = ['prithvi', 'prithvi_classifier']
 
 MODEL_LIST = CNN_LIST + MIXER_LIST + VIT_LIST + CNN_PRETRAINED_LIST + VIT_CNN_LIST + VIT_CNN_PRETRAINED_LIST
@@ -92,15 +84,6 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                 dl_val, dl_test, dl_inference, NAME, OUTPUT_FOLDER, vis_val, warmup_steps, warmup_gamma, pos_weight, 
                 weights, save_info_vars, fixed_task=None, rank=None, min_lr=None):
     
-    if downstream_task == 'pretraining':
-        trainer = training_loops.TrainFoundation(epochs=epochs, lr=lr, model=model, device=device,
-                                                  lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop, 
-                                                  train_loader=dl_train,
-                                                  val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
-                                                  out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                                  warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars, 
-                                                  apply_zoom=False, fixed_task=fixed_task, rank=rank, min_lr=min_lr)
-
     if model_name in (CNN_LIST + MIXER_LIST + VIT_CNN_LIST + CNN_PRETRAINED_LIST + VIT_CNN_PRETRAINED_LIST):
         if downstream_task == 'roads' or downstream_task == 'building':
             trainer = training_loops.TrainBase(epochs=epochs, lr=lr, model=model, device=device,
@@ -179,13 +162,12 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
 
 
 def get_models(model_name, input_channels, output_channels, input_size, fixed_task=None):
-    if model_name.startswith('FoundationModel4Task_'):
-        model_size = model_name.split('_')[-1]
-        return get_phisat2_model(model_size=model_size, return_model='pretrain', input_dim=input_channels, output_dim=input_channels, img_size=input_size, fixed_task=fixed_task)
-    if model_name.startswith('OVCompatible_FoundationModel4Task_'):
-        model_size = model_name.split('_')[-1]
-        return get_phisat2_model(model_size=model_size, return_model='pretrain_compatible', input_dim=input_channels, output_dim=input_channels, img_size=input_size, fixed_task=fixed_task)
-        # return FoundationModel4Task_CoreUnet_nano(input_dim=input_channels, output_dim=input_channels, img_size=input_size)
+    # if model_name.startswith('FoundationModel4Task_'):
+    #     model_size = model_name.split('_')[-1]
+    #     return get_phisat2_model(model_size=model_size, return_model='pretrain', input_dim=input_channels, output_dim=input_channels, img_size=input_size, fixed_task=fixed_task)
+    # if model_name.startswith('OVCompatible_FoundationModel4Task_'):
+    #     model_size = model_name.split('_')[-1]
+    #     return get_phisat2_model(model_size=model_size, return_model='pretrain_compatible', input_dim=input_channels, output_dim=input_channels, img_size=input_size, fixed_task=fixed_task)
     if model_name == 'baseline_cnn':
         return BaselineNet(input_dim=input_channels, output_dim=output_channels)
     elif model_name == 'core_unet_nano':
@@ -259,35 +241,26 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
 
     test_input = torch.rand((2,input_channels,input_size,input_size))
     
-    if model_name == 'phisat2_Classifier':
-        core_kwargs = get_phisat2_model(model_size='nano', return_model=None, input_dim=input_channels, output_dim=output_channels, img_size=input_size)
-        core_kwargs.pop('output_dim')
-        print(core_kwargs)
-        model = load_pretrained_model(pretrained_path=path_model_weights, freeze_body=freeze, downstream_task='segmentation',
-                                      downstream_output_dim=output_channels, core_args = core_kwargs, device=device)
+    if model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
+        core_kwargs = get_phisat2_model(model_size='xsmall', unet_type='geoaware')
+        print(f'core_kwargs: {core_kwargs}')
+        model = phisatnet_downstream(pretrained_path=path_model_weights, 
+                                     task='segmentation' if model_name == 'phisatnet' else 'classification',
+                                     input_dim=input_channels,
+                                     output_dim=output_channels,
+                                     freeze_body=freeze,
+                                     img_size=input_size,
+                                     **core_kwargs
+                                    )
         model(test_input)
         return model
-
-    if model_name == 'phisat2_Segmentation':
-        core_kwargs = get_phisat2_model(model_size='nano', return_model=None, input_dim=input_channels, output_dim=output_channels, img_size=input_size)
-        core_kwargs.pop('output_dim')
-        print(core_kwargs)
-        model = load_pretrained_model(pretrained_path=path_model_weights, freeze_body=freeze, downstream_task='segmentation',
-                                      downstream_output_dim=output_channels, core_args = core_kwargs, device=device)
-        model(test_input)
-        return model
-
 
     if (model_name == 'GeoAware_core_nano' or model_name == 'GeoAware_contrastive_core_nano' or
             model_name == 'GeoAware_mh_pred_core_nano'):
 
         sd = torch.load(path_model_weights)
         core_kwargs = get_core_encoder_kwargs(output_dim=output_channels, input_dim=input_channels, core_size='core_nano', full_unet=True)
-        if 'FoundationModel4Task' in path_model_weights:
-            print('Getting weights from FoundationModel4Task')
-            model = CoreEncoderGeoPretrainedFM4T(output_channels, checkpoint=sd, core_encoder_kwargs=core_kwargs, freeze_body=freeze)
-        else:
-            model = CoreEncoderGeoPretrained(output_channels, checkpoint=sd, core_encoder_kwargs=core_kwargs, freeze_body=freeze)
+        model = CoreEncoderGeoPretrained(output_channels, checkpoint=sd, core_encoder_kwargs=core_kwargs, freeze_body=freeze)
         model(test_input)
         return model
 
@@ -408,7 +381,8 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         seco_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
         return seasonal_contrast(checkpoint=path_model_weights, freeze_body=freeze, classifier=True,
                                  **seco_kwargs)
-
+    else:
+        raise ValueError(f'Unknown model name: {model_name}')
 
 def get_args():
     parser_yaml = argparse.ArgumentParser(description='Experiment TestBed for Phi-Leo Foundation Model Project')
@@ -636,10 +610,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     if warmup and warmup_gamma is not None:
         lr = lr / int(( 10 )**(warmp_steps))  # for warmup start
 
-
-    # import pdb; pdb.set_trace()
-
-
     dataset_folder = data_path_128_10m
     dataset_name = '128_10m'
     data_path_inference = data_path_inference_128
@@ -662,38 +632,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     weights = None
 
 
-    if downstream_task == 'pretraining':
-        # OUTPUT_FOLDER = f'{OUTPUT_FOLDER}'
-        # x_train, y_train, x_val, y_val = data_protocol.protocol_minifoundation(
-        #     folder='/home/phimultigpu/phileo_NFS/phileo_data/mini_foundation/mini_foundation_patches_np/patches_labeled/',
-        #     y='coords')
-
-        # downstream_task = 'geo'
-        if fixed_task is None:
-            OUTPUT_FOLDER = f'{OUTPUT_FOLDER}_{split_ratio}_4T'
-        else:
-            OUTPUT_FOLDER = f'{OUTPUT_FOLDER}_{split_ratio}_{fixed_task}'
-
-        y_supervised = ['coords', 'climate']
-        
-        if input_size <= 128:
-            dataset_folder = data_path_128_10m
-            data_path_inference = data_path_128_10m
-        elif input_size <= 256:
-            dataset_folder = data_path_224_10m
-            data_path_inference = data_path_224_10m
-        else:
-            raise ValueError("Not available data for this input size")
-        
-        # x_train, y_train, x_val, y_val = data_protocol.protocol_split_fm(
-        #     folder=dataset_folder,
-        #     y_supervised=y_supervised,
-        #     split_percentage=split_ratio,
-        #     rank=world_rank,
-        #     use_ddp=data_parallel=='DDP',
-        #     )
-        
-    elif isinstance(n_shot, int):
+    if isinstance(n_shot, int):
         OUTPUT_FOLDER = f'{OUTPUT_FOLDER}_{n_shot}'
 
         x_train, y_train, x_val, y_val, pos_weight, weights = data_protocol.protocol_fewshot_memmapped(
@@ -717,26 +656,13 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             by_region=by_region
             )
 
-    if downstream_task == 'pretraining':
-        pass
-        # x_test, y_test = data_protocol.get_testset_fm(folder=dataset_folder,
-        #                                         y_supervised=y_supervised,
-        #                                         use_ddp=data_parallel=='DDP',
-        #                                         )
-    else:
-        x_test, y_test = data_protocol.get_testset(folder=dataset_folder,
-                                                y=downstream_task,
-                                                crop_images=crop_images,
-                                                by_region=by_region,
-                                                )
+    x_test, y_test = data_protocol.get_testset(folder=dataset_folder,
+                                            y=downstream_task,
+                                            crop_images=crop_images,
+                                            by_region=by_region,
+                                            )
 
-    if downstream_task == 'pretraining':
-        pass
-        # x_inference, y_inference = data_protocol.get_testset_fm(folder=data_path_inference,
-        #                                                         y_supervised=y_supervised,
-        #                                                         use_ddp=data_parallel=='DDP',
-        #                                                         )
-    elif inference_also_on_trainval:
+    if inference_also_on_trainval:
         x_inference, y_inference = data_protocol.get_inferenceset(folder=data_path_inference,
                                                                 y=downstream_task,
                                                                 crop_images=crop_images
@@ -753,14 +679,11 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     if world_rank == 0:
         print("Dataset protocol: ", dataset_name)
 
-    if False:
         if len(x_test) == len(x_inference) and all(np.array_equal(a, b) for a, b in zip(x_test, x_inference)):
             print("Inference data is the same as test data.")
         else:
             print("Inference data is different from test data.")
 
-    # if data_parallel != 'DDP':
-    if False:
         if len(x_train.array_list) > 0:
             print("Training set datapoint shape: X -", x_train.array_list[0].shape)
         else:
@@ -780,37 +703,16 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             print("Inference set datapoint shape: X -", x_inference.array_list[0].shape)
         else:
             print("Inference dataset is empty.")
-
-    if downstream_task == 'pretraining':
-        if world_rank == 0:
-            print(f'Augmentations: {augmentations}, Data Parallel: {data_parallel}, generator_device: {generator_device}')
-        dl_train, dl_val, dl_test, dl_inference = load_data.load_foundation_data(
-                                                    lmdb_path_train=f'{dataset_folder}/train.lmdb',
-                                                    lmdb_path_val=f'{dataset_folder}/val.lmdb',
-                                                    lmdb_path_test=f'{dataset_folder}/test.lmdb',
-                                                    lmdb_path_inference=f'{dataset_folder}/test.lmdb',
+    
+    dl_train, dl_test, dl_val, dl_inference = load_data.load_data(x_train, y_train, x_val, y_val, x_test, y_test, x_inference, y_inference,
                                                     with_augmentations=augmentations,
-                                                    num_workers= num_workers,
+                                                    num_workers=num_workers,
                                                     batch_size=batch_size,
-                                                    device_dataset='cpu',
-                                                    device_dataloader=generator_device,
-                                                    input_size=input_size,
-                                                    fixed_task=fixed_task,
-                                                    use_ddp=data_parallel=='DDP',
-                                                    rank=world_rank,
-                                                    world_size=world_size,
-                                                    split_ratio=split_ratio,
-                                                    )                
-    else:
-        dl_train, dl_test, dl_val, dl_inference = load_data.load_data(x_train, y_train, x_val, y_val, x_test, y_test, x_inference, y_inference,
-                                                        with_augmentations=augmentations,
-                                                        num_workers=num_workers,
-                                                        batch_size=batch_size,
-                                                        downstream_task=downstream_task,
-                                                        model_name=model_name.split('_')[0],
-                                                        device=generator_device,
-                                                        pad_to_10_bands=pad_to_10_bands,
-                                                        )
+                                                    downstream_task=downstream_task,
+                                                    model_name=model_name.split('_')[0],
+                                                    device=generator_device,
+                                                    pad_to_10_bands=pad_to_10_bands,
+                                                    )
     if world_rank == 0:
         print(f"Length of training dataloader: {len(dl_train)}")
         print(f"Length of validation dataloader: {len(dl_val)}")
@@ -860,9 +762,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         
     else:
         model_summary = None
-
-
-    # import pdb; pdb.set_trace()
     
     save_info_vars = (model_summary, n_shot, split_ratio, warmup, init_lr)
 
@@ -899,7 +798,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
 
 
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     
     if additional_inference == 'train_test_inference':
         trainer.train()

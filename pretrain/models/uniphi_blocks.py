@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from .util_tools import SE_Block
+from util_tools import SE_Block
 
 
 class ChannelGLU(nn.Module):

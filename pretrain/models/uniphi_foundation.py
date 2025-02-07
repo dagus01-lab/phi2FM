@@ -3,8 +3,8 @@ import torch.nn as nn
 
 from tabulate import tabulate
 
-from .uniphi_blocks import CNNBlock, ChannelGLU, ScaleSkip2D
-from .util_tools import make_bilinear_upsample
+from uniphi_blocks import CNNBlock, ChannelGLU, ScaleSkip2D
+from util_tools import make_bilinear_upsample
 
 NORM_SIZE_THRESHOLD = 64
 

@@ -13,7 +13,7 @@ def make_bilinear_upsample(in_channels: int):
         kernel_size  = 4,
         stride       = 2,
         padding      = 1,
-        groups       = in_channels,  # ensures each channel is processed separately
+        groups       = in_channels,
         bias         = False
     )
 

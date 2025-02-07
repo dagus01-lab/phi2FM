@@ -3,9 +3,8 @@ import torch.nn as nn
 
 from typing import List # need because using python 3.8
 
-from .geoaware_blocks import CoreCNNBlock, CoreAttentionBlock
-from .util_tools import make_bilinear_upsample, get_activation, get_normalization
-from .uniphi_blocks import CNNBlock, SimpleCNNBlock
+from geoaware_blocks import CoreCNNBlock, CoreAttentionBlock
+from util_tools import make_bilinear_upsample, get_activation
 
 # -------------------------------------------------------------------
 # FOUNDATION MODEL
@@ -20,15 +19,13 @@ class phisat2net_geoaware(nn.Module):
         depths=None,
         dims=None,
         img_size=128,
-        dropout=True,      # optional, not really used by the Core blocks
         activation="gelu",
         fixed_task=None,
     ):
         """
-        A U-Net-like model with extra heads for:
+        A U-Net-like model with heads for:
           - climate zone classification
           - geolocation
-          - zoom level
           - reconstruction
         """
         super().__init__()
@@ -39,23 +36,7 @@ class phisat2net_geoaware(nn.Module):
         self.depths = depths
         self.dims = dims
         self.img_size = img_size
-        self.fixed_task = fixed_task
-
-        self.dropout = dropout
-        
-        if dropout:
-            self.encoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
-            self.decoder_drop_probs=[0.05, 0.1, 0.15, 0.2]
-            self.decoder_drop = 0.15
-            self.geo_dropout = 0.15
-            self.climate_dropout = 0.15
-        else:
-            self.encoder_drop_probs=None
-            self.decoder_drop_probs=None
-            self.decoder_drop = None
-            self.geo_dropout = 0.
-            self.climate_dropout = 0.
-        
+        self.fixed_task = fixed_task        
         self.activation = activation
 
         # ---------------------
@@ -108,7 +89,7 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         # 4) Heads
         # ---------------------
-        # 4.1 Reconstruction head
+        # 4.1 Reconstruction head (output_dim channels)
         if self.fixed_task is None or self.fixed_task == "reconstruction":
             self.head_recon = nn.Conv2d(in_channels=self.dims[0], out_channels=self.output_dim, kernel_size=1)
 
@@ -121,9 +102,7 @@ class phisat2net_geoaware(nn.Module):
         else:
             self.head_seg = nn.Identity()
 
-        # 4.3 Geolocation head
-        # We'll do global pooling on the bottom feature map
-        # shape => (B, 2 * dims[-1]) => -> 128 => -> 4 => Tanh
+        # 4.3 Geolocation head (4 values)
         if self.fixed_task is None or self.fixed_task == "coords":
             self.head_geo = nn.Linear(self.dims[-1], 4)
         else:
@@ -139,7 +118,7 @@ class phisat2net_geoaware(nn.Module):
     def forward(self, x):
         """
         Args:
-            x: (B, input_dim, H, W) e.g. (B, 8, 128, 128)
+            x: (B, input_dim, H, W) e.g. (B, 8, 224, 224)
 
         Returns:
             dict with keys: "coords", "climate", "reconstruction"
@@ -148,33 +127,24 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------
         # 1) Stem
         # ---------------------
-        # print(f"Input shape: {x.shape}, mean={x.mean().item():.3f}, max={x.max().item():.3f}")
         x_stem = self.stem(x)  # (B, dims[0], H, W)
-        # print(f"Stem shape: {x_stem.shape}, mean={x_stem.mean().item():.3f}, max={x_stem.max().item():.3f}")
 
 
         # ---------------------
         # 2) Encoder
         # ---------------------
-        bottom, skips = self.encoder(x_stem)
-        # print(f"Bottom shape: {bottom.shape}, mean={bottom.mean().item():.3f}, max={bottom.max().item():.3f}")
-        # bottom: (B, dims[-1], H//(2^num_stages), W//(2^num_stages))
-        # skips: list of intermediate features
-
+        bottom, skips = self.encoder(x_stem) # (B, dims[-1], H//(2^num_stages), W//(2^num_stages))
 
         # ---------------------
         # 3) Bridge
         # ---------------------
-        bottom_feats = self.bridge(bottom)
-        # print(f"Bridge shape: {bottom_feats.shape}, mean={bottom_feats.mean().item():.3f}, max={bottom_feats.max().item():.3f}")
-
+        bottom_feats = self.bridge(bottom) # (B, dims[-1], H//(2^num_stages), W//(2^num_stages))
 
         # ---------------------
         # 4) Decoder
         # ---------------------
         if self.fixed_task is None or self.fixed_task == "reconstruction":
             decoded_feats = self.decoder(bottom_feats, skips)  # (B, dims[0], H, W)
-            # print(f"Decoded shape: {decoded_feats.shape}, mean={decoded_feats.mean().item():.3f}, max={decoded_feats.max().item():.3f}")  
         else:
             decoded_feats = None
 
@@ -187,7 +157,6 @@ class phisat2net_geoaware(nn.Module):
         # 5.1 Reconstruction
         if self.fixed_task is None or self.fixed_task == "reconstruction":
             reconstruction = self.head_recon(decoded_feats)  # (B, output_dim, H, W)
-            # print(f"Reconstruction shape: {reconstruction.shape}, mean={reconstruction.mean().item():.3f}, max={reconstruction.max().item():.3f}")
         else:
             reconstruction = None
 
@@ -209,7 +178,7 @@ class phisat2net_geoaware(nn.Module):
         # ---------------------------------------
         out_dict = {
             "coords": geo_pred,                # (B, 4)
-            "climate": climate_logits,         # (B, 31, H, W) or (B, 31)
+            "climate": climate_logits,         # (B, 31)
             "reconstruction": reconstruction,  # (B, output_dim, H, W)
         }
 
@@ -278,14 +247,6 @@ class FoundationEncoder(nn.Module):
         norm="batch",
         activation="relu",
     ):
-        """
-        Args:
-            input_dim: number of channels after the 'stem'.
-            depths: e.g. [2, 2, 2, 2], how many repeated CoreCNNBlocks per stage.
-            dims: e.g. [64, 128, 256, 512].
-                  The i-th encoder block goes from dims[i-1] -> dims[i] 
-                  except for i == 0, which is input_dim -> dims[0].
-        """
         super().__init__()
         assert len(depths) == len(dims), f"depths and dims must have the same length. dims={dims}, depths={depths}"
 
@@ -303,12 +264,6 @@ class FoundationEncoder(nn.Module):
             prev_ch = dims[i]
 
     def forward(self, x):
-        """
-        Returns:
-          bottom_feats: the final downsampled feature map,
-          skip_list: list of feature maps *before* downsampling 
-                     for each stage, used by the decoder.
-        """
         skip_list = []
         for stage in self.stages:
             x, before_downsample = stage(x)
@@ -367,17 +322,12 @@ class FoundationDecoder(nn.Module):
         norm="batch",
         activation="relu",
     ):
-        """
-        Args:
-            depths: same length as dims (reversed order).
-            dims: e.g. [64, 128, 256, 512] if used in reverse for building blocks.
-        """
         super().__init__()
         assert len(depths) == len(dims), f"depths and dims must have the same length. dims={dims}, depths={depths}"
 
         self.stages = nn.ModuleList()
         self.num_stages = len(dims)
-        # We'll build them in reverse to match the skip connections
+        # Build them in reverse to match the skip connections
         for i in reversed(range(len(dims))):
             in_ch = dims[i]
             out_ch = dims[i - 1] if i - 1 >= 0 else dims[0]
@@ -391,14 +341,6 @@ class FoundationDecoder(nn.Module):
             self.stages.append(stage)
 
     def forward(self, x, skip_list):
-        """
-        Args:
-            x: bottom_feats from the encoder/bridge
-            skip_list: list of skip features in the same order 
-                       they were collected by the encoder
-        Returns:
-            x: the final upsampled feature map
-        """
         skip_list = skip_list[::-1]
         for i in range(self.num_stages):
             skip = skip_list[i]
@@ -426,7 +368,6 @@ class phisat2net_geoaware_downstream(nn.Module):
         depths=None,
         dims=None,
         img_size=128,
-        dropout=True,      # optional, not really used by the Core blocks
         activation="gelu",
         task='classification'
     ):
@@ -439,23 +380,6 @@ class phisat2net_geoaware_downstream(nn.Module):
         self.dims = dims
         self.img_size = img_size
         self.task = task
-
-        self.dropout = dropout
-
-        if dropout:
-            self.encoder_drop_probs = [0.0, 0.05, 0.1, 0.15]
-            self.decoder_drop_probs = [0.1, 0.15, 0.15, 0.2]
-            self.decoder_drop = 0.1
-
-            self.class_dropout = 0.1
-            self.segm_dropout  = 0.15
-        else:
-            self.encoder_drop_probs = None
-            self.decoder_drop_probs = None
-            self.decoder_drop = None
-
-            self.class_dropout = 0.0
-            self.segm_dropout  = 0.0
 
         # ---------------------
         # 1) Stem
@@ -508,6 +432,7 @@ class phisat2net_geoaware_downstream(nn.Module):
         # -------------------------------
         # Heads (choose by task)
         # -------------------------------
+        raise NotImplementedError("Implement heads to be the same as the other FM")
         if self.task == 'classification':
             self.head_clas = nn.Sequential(
                 nn.Flatten(),

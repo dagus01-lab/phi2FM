@@ -1,5 +1,6 @@
 import os
-import sys
+import sys; sys.path.append('/home/ccollado/phi2FM/pretrain/models')
+
 import random
 import warnings
 import argparse
@@ -15,9 +16,6 @@ import torch
 import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torchinfo import summary
-
-# Add project root to sys.path
-sys.path.append("../")
 
 # Import project-specific utilities
 from models.utils_fm import get_phisat2_model

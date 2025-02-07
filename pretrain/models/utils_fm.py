@@ -8,8 +8,8 @@ import torch.distributed as dist
 
 from collections import OrderedDict
 
-from .uniphi_foundation import phisat2net_uniphi, phisat2net_uniphi_downstream
-from .geoaware_foundation import phisat2net_geoaware, phisat2net_geoaware_downstream
+from uniphi_foundation import phisat2net_uniphi
+from geoaware_foundation import phisat2net_geoaware
 
 # -------------------------------------------------------------------
 # MULTI-TASK LOSS FUNCTION
@@ -56,15 +56,16 @@ class MultiTaskLoss(nn.Module):
         # CLIMATE SEGMENTATION
         if fixed_task is None or fixed_task == "climate":
             
-            class_counts = {0: 44899, 1: 2179, 2: 2544, 3: 11093,
-                            4: 18101, 5: 6713, 6: 6509, 7: 8397,
-                            8: 1123, 9: 886, 10: 15, 11: 3357,
-                            12: 1658, 13: 10, 14: 5067, 15: 1924,
-                            16: 63, 17: 193, 18: 564, 19: 1439,
-                            20: 55, 21: 1328, 22: 1190, 23: 3111,
-                            24: 371, 25: 2088, 26: 5867, 27: 14610,
-                            28: 608, 29: 7865, 30: 397,
-                            }
+            class_counts = {
+                0: 100989, 1: 4934, 2: 5696, 3: 24954,
+                4: 40660, 5: 15147, 6: 14634, 7: 18900,
+                8: 2567, 9: 1972, 10: 28, 11: 7628,
+                12: 3684, 13: 21, 14: 11357, 15: 4365,
+                16: 155, 17: 407, 18: 1253, 19: 3230,
+                20: 117, 21: 3023, 22: 2672, 23: 6980,
+                24: 799, 25: 4670, 26: 13207, 27: 32826,
+                28: 1387, 29: 17681, 30: 912
+            } # calculate them using climate_class_counter.py
 
             reduced_class_counts = {
                 0: class_counts[0], # water/no-data
@@ -77,7 +78,7 @@ class MultiTaskLoss(nn.Module):
             
             # class_counts = reduced_class_counts
 
-            alpha = 0.5 # choose value between 0.1 and 0.9 --> 0.5 means sqrt
+            alpha = 0.5 # choose value between 0.1 and 0.9 --> 0.5 means sqrt (the higher, the more weight given to less frequent classes)
 
             counts_array = np.array(list(class_counts.values()), dtype=np.float32)
             weights = 1.0 / np.power(counts_array, alpha)
@@ -420,28 +421,11 @@ def get_phisat2_model(
         elif unet_type == 'geoaware':
             return phisat2net_geoaware(depths=depths,
                                        dims=dims,
-                                       dropout=True,
                                        fixed_task=fixed_task,
                                        **kwargs
-                                       )
-        
+                                       )        
         
     else:
-        assert downstream_task in ['segmentation', 'classification'], f"Invalid return model: {downstream_task}"
-        if unet_type == 'uniphi':
-            return phisat2net_uniphi_downstream(depths=depths,
-                                                   dims=dims,
-                                                   ov_compatiblity=True,
-                                                   task=downstream_task,
-                                                   **kwargs)
-        elif unet_type == 'geoaware':
-            return phisat2net_geoaware_downstream(depths=depths,
-                                                   dims=dims,
-                                                   task=downstream_task,
-                                                   **kwargs)
-        
-        
-    if downstream_task is None:
         updated_kwargs = kwargs.copy()
         updated_kwargs.update({'depths': depths, 'dims': dims})
         return updated_kwargs
