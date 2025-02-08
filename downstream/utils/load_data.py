@@ -20,9 +20,6 @@ import random
 from torchvision import transforms
 import math
 
-import cv2 
-
-
 # statistics used to normalize images before passing to the model
 MEANS_PRITHVI = np.array(Prithvi_100M_config.data_mean).reshape(1, 1, -1)
 STDS_PRITHVI = np.array(Prithvi_100M_config.data_std).reshape(1, 1, -1)

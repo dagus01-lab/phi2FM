@@ -1,5 +1,4 @@
 import os
-import sys; sys.path.append('/home/ccollado/phi2FM/pretrain/models')
 
 import random
 import warnings
@@ -18,7 +17,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torchinfo import summary
 
 # Import project-specific utilities
-from models.utils_fm import get_phisat2_model
+from pretrain.models.utils_fm import get_phisat2_model
 from utils import load_data, training_loops
 from utils.training_utils import (
     read_yaml,

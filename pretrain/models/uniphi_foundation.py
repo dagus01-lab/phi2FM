@@ -3,8 +3,8 @@ import torch.nn as nn
 
 from tabulate import tabulate
 
-from uniphi_blocks import CNNBlock, ChannelGLU, ScaleSkip2D
-from util_tools import make_bilinear_upsample
+from pretrain.models.uniphi_blocks import CNNBlock, ChannelGLU, ScaleSkip2D
+from pretrain.models.util_tools import make_bilinear_upsample
 
 NORM_SIZE_THRESHOLD = 64
 
@@ -17,7 +17,7 @@ def get_stage_norm(spatial_size, norm_size_threshold):
 
 
 # -------------------------------------------------------------------
-# The combined multi-task model
+# FOUNDATION MODEL
 # -------------------------------------------------------------------
 class phisat2net_uniphi(nn.Module):
     def __init__(
@@ -36,10 +36,9 @@ class phisat2net_uniphi(nn.Module):
         climate_segm=False,
     ):
         """
-        A U-Net-like model with extra heads for:
-          - climate zone segmentation
+        A U-Net-like model with heads for:
+          - climate zone classification
           - geolocation
-          - zoom level
           - reconstruction
         """
         super().__init__()
@@ -187,13 +186,12 @@ class phisat2net_uniphi(nn.Module):
     def forward(self, x, print_outs = False):
         """
         Args:
-            x: (B, 8, 128, 128)
+            x: (B, 8, 224, 224)
         Returns:
             dict of tasks:
               coords -> (B, 4)
-              climate -> (B, 31, 128, 128)
-              zoom_factor -> (B, 1)
-              reconstruction -> (B, 3, 128, 128)
+              climate -> (B, 31)
+              reconstruction -> (B, 8, 224, 224)
         """
         # Stem
         x = self.stem(x)  # (B, dims[0], H, W)
@@ -203,16 +201,14 @@ class phisat2net_uniphi(nn.Module):
         # bottom_feats shape: (B, dims[-1], H_enc, W_enc)
         # H_enc, W_enc = 128 / 2^(steps-1) if each stage does 2x downsample
 
-        # Global average pooling for geolocation / zoom
+        # Pooling for geolocation / climate
         # This yields (B, dims[-1])
-        # pooled_feats = bottom_feats.mean(dim=(2, 3))  # global average across spatial dims
         pooled_feats = self.pool_feats(bottom_feats)
 
         # Heads for global tasks
         if self.fixed_task is None or self.fixed_task == "coords":
             geo_pred = self.head_geo(pooled_feats)  # (B, 4)
         else:
-            # geo_pred = torch.zeros(x.size(0), 4, device=x.device)
             geo_pred = None
 
         # Decoder
@@ -225,7 +221,6 @@ class phisat2net_uniphi(nn.Module):
         if self.fixed_task is None or self.fixed_task == "reconstruction":
             reconstruction = self.head_recon(decoded_feats)  # (B, output_dim, 128, 128)
         else:
-            # reconstruction = torch.zeros(x.size(0), self.output_dim, self.img_size, self.img_size, device=x.device)
             reconstruction = None
 
         # Climate
@@ -235,7 +230,6 @@ class phisat2net_uniphi(nn.Module):
             else:
                 climate_logits = self.head_seg(pooled_feats)
         else:
-            # climate_logits = self.create_dummy_tensor(x.size(0), 31, self.img_size, self.img_size, device=x.device)
             climate_logits = None
         
         if print_outs: 
@@ -531,232 +525,5 @@ class FoundationDecoder(nn.Module):
 
         x = self.prehead_norm(x)
         return x
-
-
-
-
-class phisat2net_uniphi_downstream(nn.Module):
-    def __init__(
-        self,
-        *,
-        input_dim=3,
-        output_dim=None,
-        depths=None,
-        dims=None,
-        img_size=128,
-        dropout=True,
-        activation=nn.GELU(),
-        ov_compatiblity=False,
-        task='classification'
-    ):
-        super().__init__()
-
-        self.input_dim = input_dim
-        self.output_dim = input_dim if output_dim is None else output_dim
-        self.depths = depths
-        self.dims = dims
-        self.img_size = img_size
-        self.task = task
-        if ov_compatiblity:
-            self.activation = activation
-            self.channel_activation = ChannelGLU()
-        else:
-            self.activation = activation
-            self.channel_activation = ChannelGLU()
-
-        self.dropout = dropout
-
-        if dropout:
-            # Example: same pattern as your Foundation Model
-            self.encoder_drop_probs = [0.0, 0.05, 0.1, 0.15]
-            self.decoder_drop_probs = [0.1, 0.15, 0.15, 0.2]
-            self.decoder_drop = 0.1
-
-            self.class_dropout = 0.1
-            self.segm_dropout  = 0.15
-        else:
-            self.encoder_drop_probs = None
-            self.decoder_drop_probs = None
-            self.decoder_drop = None
-
-            self.class_dropout = 0.0
-            self.segm_dropout  = 0.0
-
-        # -------------------------------
-        # Stem (no flattening)
-        # -------------------------------
-        self.stem = CNNBlock(
-            channels_in=input_dim,
-            channels_out=dims[0],
-            chw=None,
-            activation=self.activation,
-        )
-
-        # -------------------------------
-        # Encoder
-        # -------------------------------
-        self.encoder = FoundationEncoder(
-            input_dim=dims[0],
-            depths=depths,
-            dims=dims,
-            img_size=img_size,
-            activation=self.channel_activation,
-            encoder_drop_probs=self.encoder_drop_probs,
-        )
-
-        # -------------------------------
-        # Decoder
-        # -------------------------------
-        self.decoder = FoundationDecoder(
-            depths=depths[::-1],
-            dims=dims[::-1],
-            img_size=img_size,
-            dropout=self.decoder_drop,
-            activation=self.channel_activation,
-            ov_compatiblity=ov_compatiblity,
-            decoder_drop_probs=self.decoder_drop_probs,
-        )
-
-        # -------------------------------
-        # Heads (choose by task)
-        # -------------------------------
-        if self.task == 'classification':
-            # Example: classification head with optional dropout
-            # after Flatten and before final Linear
-            # self.head_clas = nn.Sequential(
-            #     nn.AdaptiveAvgPool2d((1, 1)),
-            #     nn.Flatten(),
-            #     *([] if self.class_dropout == 0 else [nn.Dropout(p=self.class_dropout)]),
-            #     nn.Linear(self.dims[-1], self.output_dim),
-            # )
-
-            self.head_clas = nn.Sequential(
-                nn.Linear(self.dims[-1]  * 2, 128),
-                nn.GELU(),
-                *([] if self.class_dropout == 0 else [nn.Dropout(p=self.class_dropout)]),
-                nn.Linear(128, self.output_dim),
-            )
-
-        elif self.task == 'segmentation':
-            # Example: segmentation head with dropout in the CNNBlock
-            self.head_segm = CNNBlock(
-                channels_in=self.dims[0],
-                channels_out=self.output_dim,
-                # chw=[self.output_dim, self.img_size, self.img_size],
-                chw=None,
-                activation=self.activation,
-                activation_out=nn.Identity(),
-                drop_prob_main=self.segm_dropout   # apply main dropout in the block
-            )
-        
-        else:
-            raise ValueError(f"Invalid task: {self.task}")
-
-    def pool_feats(self, x):
-        avg_pooled_feats = nn.AdaptiveAvgPool2d(1)(x)  # Shape: (B, C, 1, 1)
-        max_pooled_feats = nn.AdaptiveMaxPool2d(1)(x)  # Shape: (B, C, 1, 1)
-
-        combined_pooled_feats = torch.cat((avg_pooled_feats, max_pooled_feats), dim=1)  # Shape: (B, 2*C, 1, 1)
-        pooled_feats = combined_pooled_feats.view(combined_pooled_feats.size(0), -1)  # Shape: (B, 2*C)
-        return pooled_feats
-
-    def forward(self, x):
-        x = self.stem(x)
-        x, skips = self.encoder(x)
-        if self.task == 'classification':
-            x = self.pool_feats(x)
-            x = self.head_clas(x)
-        elif self.task == 'segmentation':
-            x = self.decoder(x, skips)
-            x = self.head_segm(x)
-        else:
-            raise ValueError(f"Invalid task: {self.task}")
-        return x
-
-
-
-
-
-
-
-def load_pretrained_model(
-    pretrained_path: str,
-    core_args: dict,
-    downstream_task: str = "classification",
-    downstream_output_dim: int = 10,
-    device: str = "cpu",
-):
-    """
-    Loads a pretrained phisat2net_uniphi model from `pretrained_path`
-    (which contains only `state_dict`, no config) and creates a 
-    phisat2net_uniphi_downstream with matching stem & encoder.
-
-    Args:
-        pretrained_path (str): Path to the .pt file with the pretrained state_dict.
-        core_args (dict): Dictionary specifying the essential architecture args, e.g.:
-            {
-                'input_dim': 8,
-                'img_size': 224,
-                'depths': [2, 2, 8, 2],
-                'dims': [80, 160, 320, 640]
-            }
-        downstream_task (str): "classification" or "segmentation".
-        downstream_output_dim (int): Number of classes or channels for the head.
-        device (str): "cpu" or "cuda" device.
-
-    Returns:
-        downstream_model (nn.Module): A phisat2net_uniphi_downstream model
-            with pretrained stem & encoder weights.
-    """
-
-    # 1. Load the state_dict from disk
-    checkpoint = torch.load(pretrained_path, map_location=device)
-    pretrained_state_dict = checkpoint["state_dict"]  # or directly checkpoint if it's just a dict
-
-    # 2. We must specify all necessary config arguments manually in `core_args`.
-    #    Provide defaults for others if needed (e.g., dropout, activation, etc.).
-    #    Example:
-    default_args = {
-        "output_dim": 8,
-        "dropout": True,
-        "activation": nn.GELU(),
-        "ov_compatiblity": True,
-        "apply_zoom": False,
-        "fixed_task": None,
-        "climate_segm": False,
-    }
-    # Merge user core_args with defaults
-    model_args = {**default_args, **core_args}
-
-    # 3. Instantiate the *upstream* model with these args
-    #    This must match the architecture of the original trained model.
-    upstream_model = phisat2net_uniphi(**model_args).to(device)
-
-    # 4. Load pretrained weights
-    upstream_model.load_state_dict(pretrained_state_dict, strict=True)
-    upstream_model.eval()
-
-    # 5. Create the *downstream* model, ensuring it has the same stem/encoder
-    #    architecture. For the "downstream" portion, you just specify the
-    #    classification or segmentation head.
-    downstream_model = phisat2net_uniphi_downstream(
-        input_dim=model_args["input_dim"],
-        output_dim=downstream_output_dim,
-        depths=model_args["depths"],
-        dims=model_args["dims"],
-        img_size=model_args["img_size"],
-        dropout=model_args["dropout"],
-        activation=model_args["activation"],
-        ov_compatiblity=model_args["ov_compatiblity"],
-        task=downstream_task,
-    ).to(device)
-
-    # 6. Copy the 'stem' and 'encoder' weights from the upstream model
-    downstream_model.stem.load_state_dict(upstream_model.stem.state_dict())
-    downstream_model.encoder.load_state_dict(upstream_model.encoder.state_dict())
-
-    return downstream_model
-
-
 
 

@@ -1,0 +1,39 @@
+
+experiment_name: nshot_phi2/phi2_phi2model
+downstream_task: lc
+model_name: phisatnet   # **********************************
+augmentations: True
+batch_size: 32
+model_device: cpu
+generator_device: cpu
+num_workers: 16
+early_stop: 15
+epochs: 500
+input_channels: 8 # **********************************
+output_channels: 11
+input_size: 224 # **********************************
+lr: 0.0001
+lr_scheduler: reduce_on_plateau
+n_shot: 500 # **********************************
+split_ratio: null
+regions: null
+vis_val: True
+warmup: True
+warmp_steps: 5
+warmup_gamma: 10
+min_lr: null
+pretrained_model_path: /home/ccollado/pretrained_weights/phisat2net_geoaware_two_epochs.pt # **********************************
+freeze_pretrained: True
+data_path_128_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
+data_path_224_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
+data_path_224_30m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
+additional_inference: train_test                      # train_test, train_test_inference, inference, train_inference # **********************************
+inference_model_path: /home/ccollado/pretrained_weights/phisat2net_geoaware_two_epochs.pt # **********************************
+inference_also_on_trainval: False
+data_path_inference_128: /home/ccollado/phileo_phisat2/L1C/np_patches_128/ # **********************************
+data_path_inference_224: /home/ccollado/phileo_phisat2/L1C/np_patches_224/ # **********************************
+output_path: /home/ccollado/2_phileo_fm/models
+data_parallel: False
+device_ids: [0]
+pad_to_10_bands: False
+only_get_datasets: False

@@ -24,7 +24,6 @@ import torch.distributed as dist
 # utils
 from utils import visualize
 from utils import config_lc
-from pytorch_msssim import ms_ssim
 
 class TrainBase():
 

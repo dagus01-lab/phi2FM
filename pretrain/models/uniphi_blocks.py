@@ -1,10 +1,9 @@
-# flake8: noqa: E501
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from util_tools import SE_Block
+from pretrain.models.util_tools import SE_Block
 
 
 class ChannelGLU(nn.Module):
@@ -90,35 +89,6 @@ class ScaleSkip2D(nn.Module):
 
 
 class CNNBlock(nn.Module):
-    """
-    This is a standard CNN block with a 1x1 convolutional matcher for the skip connection.
-    It adds a learnable scale and bias to the skip connection.
-
-    Parameters
-    ----------
-    channels_in : int
-        Number of channels in the input
-
-    channels_out : int or None
-        Number of channels in the output. If None, the number of channels is unchanged.
-        default: None
-
-    group_size : int
-        Number of groups for the 3x3 convolution.
-        default: 1
-
-    activation : torch.nn.Module
-        Activation function to use after the first convolution.
-        default: torch.nn.GELU()
-
-    activation_out : torch.nn.Module or None
-        Activation function to use after the last convolution. If None, the same activation as the first convolution is used.
-        default: None
-
-    chw : tuple or None
-        Height and width of the input. If None, batch norm is used instead of layer norm.
-        default: None
-    """
     def __init__(
         self,
         channels_in,
@@ -132,8 +102,6 @@ class CNNBlock(nn.Module):
         drop_prob_main=0.0,
     ):
         super().__init__()
-
-        # assert chw is not None, "chw must be specified"
 
         self.channels_in = channels_in
         self.channels_out = channels_in if channels_out is None else channels_out
@@ -151,8 +119,6 @@ class CNNBlock(nn.Module):
         if self.chw is None:
             self.norm1 = nn.BatchNorm2d(self.channels_internal)
             self.norm2 = nn.BatchNorm2d(self.channels_internal)
-            # self.norm1 = nn.Identity()
-            # self.norm2 = nn.Identity()
 
         elif self.chw == 'group_norm':
             self.norm1 = nn.GroupNorm(8, self.channels_internal)
@@ -161,11 +127,8 @@ class CNNBlock(nn.Module):
         else:
             self.norm1 = nn.LayerNorm([self.channels_internal, self.chw[1], self.chw[2]])
             self.norm2 = nn.LayerNorm([self.channels_internal, self.chw[1], self.chw[2]])
-            # self.norm1 = ManualLayerNorm([self.channels_internal, self.chw[1], self.chw[2]])
-            # self.norm2 = ManualLayerNorm([self.channels_internal, self.chw[1], self.chw[2]])
 
         self.conv1 = nn.Conv2d(self.channels_in, self.channels_internal, 1, padding=0, bias=False)
-        # self.conv2 = nn.Conv2d(self.channels_internal, self.channels_internal, 3, padding=1, groups=self.group_size, bias=False, padding_mode="replicate")
         self.conv2 = nn.Conv2d(self.channels_internal, self.channels_internal, 3, padding=1, bias=False, padding_mode="replicate")
         self.conv3 = nn.Conv2d(self.channels_internal, self.channels_out, 1, padding=0, bias=True)
 
@@ -181,23 +144,14 @@ class CNNBlock(nn.Module):
         if self.residual:
             identity = x if self.matcher is None else self.matcher(x)
         
-        # print(" ")
-        # init_x = x.mean().item()
-        # print(f"Input: min={x.min().item()}, max={x.max().item()}, mean={x.mean().item()}, std={x.std().item()}")
-        x = self.conv1(x)
-        # print(f"{init_x:.16f} -- Before Norm: Min={x.min().item()} Max={x.max().item()} Mean={x.mean().item()} NaNs={torch.isnan(x).sum().item()}")
-        x = self.norm1(x)
-        # print(f"After norm1: min={x.min().item()}, max={x.max().item()}, mean={x.mean().item()}, std={x.std().item()}")
-        x = self.activation(x)
-
-        x = self.conv2(x)
-        x = self.norm2(x)
-        x = self.activation(x)
+        x = self.activation(self.norm1(self.conv1(x)))
+        x = self.activation(self.norm2(self.conv2(x)))
 
         if self.dropout_main is not None:
             x = self.dropout_main(x)
 
         x = self.conv3(x)
+        
         x = self.squeeze(x)
 
         if self.residual:
@@ -207,63 +161,3 @@ class CNNBlock(nn.Module):
         return x
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-class SimpleCNNBlock(nn.Module):
-
-    def __init__(
-        self,
-        channels_in,
-        channels_out=None,
-        activation=nn.GELU(),
-        activation_out=nn.Identity(),
-        residual=True,
-        chw=None,
-    ):
-        super().__init__()
-
-        self.channels_in = channels_in
-        self.channels_out = channels_in if channels_out is None else channels_out
-        self.channels_internal = self.channels_out
-        self.activation = activation
-        self.activation_out = activation if activation_out is None else activation_out
-        self.residual = residual
-        # self.squeeze = SE_Block(self.channels_out, 16)
-
-        self.matcher = nn.Conv2d(self.channels_in, self.channels_out, 1, padding=0, bias=False) if ((self.channels_in != self.channels_out) and residual) else None
-
-        self.norm1 = nn.BatchNorm2d(self.channels_internal)
-        self.norm2 = nn.BatchNorm2d(self.channels_internal)
-
-        self.conv1 = nn.Conv2d(self.channels_in, self.channels_internal, 1, padding=0, bias=False)
-        self.conv2 = nn.Conv2d(self.channels_internal, self.channels_internal, 3, padding=1, bias=False, padding_mode="replicate")
-        # self.conv3 = nn.Conv2d(self.channels_internal, self.channels_out, 1, padding=0, bias=True)
-
-        self.scaler = ScaleSkip2D(self.channels_out) if self.residual else None
-
-    def forward(self, x):
-        if self.residual:
-            identity = x if self.matcher is None else self.matcher(x)
-
-        x = self.activation(self.norm1(self.conv1(x)))
-        x = (self.norm2(self.conv2(x)))
-
-        # x = self.conv3(x)
-        # x = self.squeeze(x)
-
-        if self.residual:
-            x = self.scaler(x, identity)
-
-        x = self.activation_out(x)
-        
-        return x

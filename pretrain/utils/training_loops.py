@@ -18,11 +18,7 @@ import torch.distributed as dist
 
 # utils
 from utils import visualize
-
-import sys
-# sys.path.append('./models/')
 from models.utils_fm import MultiTaskLoss
-
 from utils.custom_scheduler import MultiMetricScheduler
 
 class TrainBase():

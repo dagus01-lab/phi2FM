@@ -1,26 +1,26 @@
 import torch
 import torch.nn as nn
+import warnings
 
-from geoaware_blocks import CoreCNNBlock
-from geoaware_foundation import FoundationEncoder, FoundationDecoder
+from pretrain.models.geoaware_blocks import CoreCNNBlock
+from pretrain.models.geoaware_foundation import FoundationEncoder, FoundationDecoder
 
-# Assuming CoreCNNBlock, FoundationEncoder, FoundationDecoder are defined elsewhere.
 
-class phisatnet_downstream(nn.Module):
+class PhiSatNetDownstream(nn.Module):
     def __init__(
         self,
         *,
-        pretrained_path,  # path to the .pt file with pretrained weights
-        task,           # either "segmentation" or "classification"
-        input_dim=3,
-        output_dim=None,  # number of segmentation classes or classification outputs
-        depths=None,      # list of encoder depths (e.g., [2,2,6,2])
-        dims=None,        # list of channel dimensions (e.g., [64, 128, 256, 512])
-        img_size=128,     # image resolution (if needed)
-        norm_foundation="group",
-        norm_downstream="batch",
-        activation="gelu",
-        freeze_body=False  # when True, freezes the pretrained stem and encoder parameters
+        pretrained_path: str,
+        task: str,
+        input_dim: int = 3,
+        output_dim: int = None,
+        depths: list = None,
+        dims: list = None,
+        img_size: int = 224,
+        norm_foundation: str = "group",
+        norm_downstream: str = "batch",
+        activation: str = "gelu",
+        freeze_body: bool = False
     ):
         """
         Downstream model that reuses the pretrained stem and encoder from the foundation model.
@@ -28,16 +28,16 @@ class phisatnet_downstream(nn.Module):
         For classification, a new classification head is added.
         
         Args:
-            pretrained_path (str): Path to the .pt file with pretrained weights.
+            pretrained_path (str): Path to the .pt file with pretrained model (of class phisat2net_geoaware).
             task (str): Either "segmentation" or "classification".
-            input_dim (int): Number of input channels.
-            output_dim (int): Number of segmentation classes or classification outputs.
-            depths (list): List of encoder depths (e.g., [2,2,6,2]).
-            dims (list): List of channel dimensions (e.g., [64, 128, 256, 512]).
-            img_size (int): Image resolution.
-            norm_foundation (str): Normalization type for the foundation (e.g., "group").
-            norm_downstream (str): Normalization type for the downstream (e.g., "batch").
-            activation (str): Activation function to use (e.g., "gelu").
+            input_dim (int): Number of input channels (10 for S2, 8 for phisat2).
+            output_dim (int): Number of classification classes (either pixel or image level). For regression, set to 1.
+            depths (list): Encoder depths (e.g., [2, 2, 6, 2]).
+            dims (list): Channel dimensions (e.g., [64, 128, 256, 512]).
+            img_size (int): Image resolution (model was pretrained with 224x224).
+            norm_foundation (str): Normalization type for the stem and encoder.
+            norm_downstream (str): Normalization type for the bridge, decoder, and head.
+            activation (str): Activation function to use.
             freeze_body (bool): If True, freezes the parameters of the pretrained stem and encoder.
         """
         super().__init__()
@@ -60,7 +60,6 @@ class phisatnet_downstream(nn.Module):
         # ----------------------------------
         # 1) Reuse the pretrained stem and encoder
         # ----------------------------------
-        # These are created with the same hyper-parameters as in the foundation model.
         self.stem = CoreCNNBlock(
             in_channels=self.input_dim,
             out_channels=self.dims[0],
@@ -76,10 +75,10 @@ class phisatnet_downstream(nn.Module):
             activation=self.activation,
         )
 
-        # Load the pretrained weights for the stem and encoder.
+        # Load the pretrained weights.
         self._load_pretrained(pretrained_path)
 
-        # Freeze stem and encoder if requested.
+        # (Optional) Freeze stem and encoder.
         if freeze_body:
             for param in self.stem.parameters():
                 param.requires_grad = False
@@ -90,14 +89,7 @@ class phisatnet_downstream(nn.Module):
         # 2) Build the downstream branch
         # ----------------------------------
         if self.task == "segmentation":
-            # For segmentation we add a new FoundationDecoder (newly initialized)
-            self.decoder = FoundationDecoder(
-                depths=self.depths,
-                dims=self.dims,
-                norm=self.norm_downstream,
-                activation=self.activation,
-            )
-            # New bridge that mimics the original bridge but freshly initialized
+            # Bridge + Decoder + Head (no pretrained weights used here).
             self.bridge = nn.Sequential(
                 CoreCNNBlock(
                     in_channels=self.dims[-1],
@@ -106,7 +98,12 @@ class phisatnet_downstream(nn.Module):
                     activation=self.activation,
                 )
             )
-            # New head that processes the decoder output into segmentation logits
+            self.decoder = FoundationDecoder(
+                depths=self.depths,
+                dims=self.dims,
+                norm=self.norm_downstream,
+                activation=self.activation,
+            )
             self.head = nn.Sequential(
                 CoreCNNBlock(
                     in_channels=self.dims[0],
@@ -117,7 +114,7 @@ class phisatnet_downstream(nn.Module):
                 nn.Conv2d(self.dims[0], self.output_dim, kernel_size=1, padding=0)
             )
         elif self.task == "classification":
-            # For classification, no decoder or bridge is used. Instead, we add a classification head.
+            # Head (no pretrained weights used here).
             self.decoder = None
             self.bridge = None
             self.head = nn.Sequential(
@@ -126,15 +123,15 @@ class phisatnet_downstream(nn.Module):
                 nn.Linear(self.dims[-1], self.output_dim)
             )
         else:
-            raise ValueError("Unsupported task. Choose either 'segmentation' or 'classification'.")
+            raise ValueError(f"Task {self.task} not recognized. Must be either 'segmentation' or 'classification'.")
 
     def _load_pretrained(self, pretrained_path):
         """
         Loads the pretrained weights (from a .pt file) into the stem and encoder.
-        Assumes that the saved state dict has keys prefixed with "stem." and "encoder.".
-        Also handles the case when the keys are prefixed with "module." due to DDP.
+        Handles the case when the keys are prefixed with "module." (due to training with DP/DDP).
         """
         checkpoint = torch.load(pretrained_path, map_location="cpu")
+        
         # If the checkpoint is a dict with a 'state_dict' key, use that.
         state_dict = checkpoint["state_dict"] if "state_dict" in checkpoint else checkpoint
 
@@ -153,9 +150,9 @@ class phisatnet_downstream(nn.Module):
         }
         missing, unexpected = self.stem.load_state_dict(stem_state, strict=False)
         if missing:
-            print("Warning: The following keys were not found in the pretrained stem:", missing)
+            warnings.warn(f"The following keys were not found in the pretrained stem: {missing}")
         if unexpected:
-            print("Note: The following unexpected keys in pretrained stem were ignored:", unexpected)
+            warnings.warn(f"The following unexpected keys in pretrained stem were ignored: {unexpected}")
 
         # Load encoder weights.
         encoder_state = {
@@ -164,9 +161,9 @@ class phisatnet_downstream(nn.Module):
         }
         missing, unexpected = self.encoder.load_state_dict(encoder_state, strict=False)
         if missing:
-            print("Warning: The following keys were not found in the pretrained encoder:", missing)
+            warnings.warn(f"The following keys were not found in the pretrained encoder: {missing}")
         if unexpected:
-            print("Note: The following unexpected keys in pretrained encoder were ignored:", unexpected)
+            warnings.warn(f"The following unexpected keys in pretrained encoder were ignored: {unexpected}")
 
     def forward(self, x):
         """
@@ -177,18 +174,18 @@ class phisatnet_downstream(nn.Module):
               x -> stem -> encoder -> head -> classification logits (B, output_dim)
         """
         # 1) Stem
-        x_stem = self.stem(x)  # shape: (B, dims[0], H, W)
+        x_stem = self.stem(x)                                   # shape: (B, dims[0], H, W)
 
         # 2) Encoder
-        bottom, skips = self.encoder(x_stem)  # bottom: (B, dims[-1], ...)
+        bottom, skips = self.encoder(x_stem)                    # bottom: (B, dims[-1], H//(2^num_stages), W//(2^num_stages))
 
         # 3) Downstream branch
         if self.task == "segmentation":
-            bottom_feats = self.bridge(bottom)
-            decoded_feats = self.decoder(bottom_feats, skips)  # shape: (B, dims[0], H, W)
-            seg_logits = self.head(decoded_feats)  # shape: (B, output_dim, H, W)
+            bottom_feats = self.bridge(bottom)                  # shape: (B, dims[-1], H, W)
+            decoded_feats = self.decoder(bottom_feats, skips)   # shape: (B, dims[0], H, W)
+            seg_logits = self.head(decoded_feats)               # shape: (B, output_dim, H, W)
             return seg_logits
 
         elif self.task == "classification":
-            class_logits = self.head(bottom)  # shape: (B, output_dim)
+            class_logits = self.head(bottom)                    # shape: (B, output_dim)
             return class_logits

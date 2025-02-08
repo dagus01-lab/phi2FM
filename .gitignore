@@ -1,9 +1,10 @@
 # Ignore compiled Python files
 __pycache__/
-*.pyc
-*.pyo
 
-# Ignore log files
+# Ignore the build directory for local Python packages
+*.egg-info/
+
+# Ignore log files (from nohup or other processes)
 *.log
 
 # Ignore Jupyter Notebook checkpoints
@@ -14,7 +15,6 @@ github
 github.pub
 
 # Ignore model checkpoints or large data files (if applicable)
-*.h5
 *.pth
 *.pt
 *.ckpt
@@ -26,3 +26,4 @@ Thumbs.db
 
 # Ignore .vscode folders
 .vscode/
+

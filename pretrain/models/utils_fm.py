@@ -8,8 +8,8 @@ import torch.distributed as dist
 
 from collections import OrderedDict
 
-from uniphi_foundation import phisat2net_uniphi
-from geoaware_foundation import phisat2net_geoaware
+from pretrain.models.uniphi_foundation import phisat2net_uniphi
+from pretrain.models.geoaware_foundation import phisat2net_geoaware
 
 # -------------------------------------------------------------------
 # MULTI-TASK LOSS FUNCTION
@@ -426,6 +426,7 @@ def get_phisat2_model(
                                        )        
         
     else:
+        print("Returning the model kwargs")
         updated_kwargs = kwargs.copy()
         updated_kwargs.update({'depths': depths, 'dims': dims})
         return updated_kwargs

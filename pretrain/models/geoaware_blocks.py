@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from util_tools import SE_Block, get_activation, get_normalization
+from pretrain.models.util_tools import SE_Block, get_activation, get_normalization
 
 
 class CoreCNNBlock(nn.Module):

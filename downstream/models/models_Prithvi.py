@@ -19,7 +19,7 @@ from timm.models.layers import to_2tuple
 
 import numpy as np
 
-from einops import rearrange
+# from einops import rearrange
 from utils.Prithvi_100M_config import model_args, data_mean, data_std
 from models.model_DecoderUtils import CoreDecoder
 

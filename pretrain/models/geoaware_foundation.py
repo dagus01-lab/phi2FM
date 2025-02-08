@@ -3,8 +3,8 @@ import torch.nn as nn
 
 from typing import List # need because using python 3.8
 
-from geoaware_blocks import CoreCNNBlock, CoreAttentionBlock
-from util_tools import make_bilinear_upsample, get_activation
+from pretrain.models.geoaware_blocks import CoreCNNBlock, CoreAttentionBlock
+from pretrain.models.util_tools import make_bilinear_upsample, get_activation
 
 # -------------------------------------------------------------------
 # FOUNDATION MODEL
@@ -348,114 +348,3 @@ class FoundationDecoder(nn.Module):
         
         return x
 
-
-
-
-
-
-
-
-
-
-
-
-class phisat2net_geoaware_downstream(nn.Module):
-    def __init__(
-        self,
-        *,
-        input_dim=3,
-        output_dim=None,
-        depths=None,
-        dims=None,
-        img_size=128,
-        activation="gelu",
-        task='classification'
-    ):
-        super().__init__()
-
-        # Basic model parameters
-        self.input_dim = input_dim
-        self.output_dim = input_dim if output_dim is None else output_dim
-        self.depths = depths
-        self.dims = dims
-        self.img_size = img_size
-        self.task = task
-
-        # ---------------------
-        # 1) Stem
-        # ---------------------
-        # We will go from input_dim -> dims[0]
-        self.stem = CoreCNNBlock(
-            in_channels=self.input_dim,
-            out_channels=self.dims[0],
-            norm="batch",
-            activation=activation,
-            residual=False
-        )
-
-        # ---------------------
-        # 2) Encoder
-        # ---------------------
-        # We'll create an encoder from dims[0] -> dims[1] -> dims[2] -> ...
-        # with the specified depths
-        self.encoder = FoundationEncoder(
-            input_dim=self.dims[0],
-            depths=self.depths,
-            dims=self.dims,  # we already consumed dims[0] in the stem
-            norm="batch",
-            activation=activation,
-        )
-
-        # ---------------------
-        # Bridge
-        # ---------------------
-        # Typically we do a small bridging block at the bottom
-        # to let the model "breathe" in the bottleneck:
-        self.bridge = CoreCNNBlock(
-            in_channels=self.dims[-1],
-            out_channels=self.dims[-1],
-            norm="batch",
-            activation=activation,
-            residual=False
-        )
-
-        # ---------------------
-        # 3) Decoder
-        # ---------------------
-        self.decoder = FoundationDecoder(
-            depths=self.depths,
-            dims=self.dims,
-            norm="batch",
-            activation=activation,
-        )
-
-        # -------------------------------
-        # Heads (choose by task)
-        # -------------------------------
-        raise NotImplementedError("Implement heads to be the same as the other FM")
-        if self.task == 'classification':
-            self.head_clas = nn.Sequential(
-                nn.Flatten(),
-                nn.Linear(self.dims[-1], self.output_dim),
-            )
-
-        elif self.task == 'segmentation':
-            self.head_segm = nn.Sequential(
-                CoreCNNBlock(self.dims[0], self.dims[0], norm="batch", activation=activation),
-                nn.Conv2d(self.dims[0], self.output_dim, kernel_size=1, padding=0),
-            )
-
-        else:
-            raise ValueError(f"Invalid task: {self.task}")
-    
-    def forward(self, x):
-        x = self.stem(x)
-        x, skips = self.encoder(x)
-        if self.task == 'classification':
-            x = self.head_clas(x)
-        elif self.task == 'segmentation':
-            x = self.decoder(x, skips)
-            x = self.head_segm(x)
-        else:
-            raise ValueError(f"Invalid task: {self.task}")
-        return x

@@ -12,8 +12,6 @@ import random
 import torch.nn as nn
 from datetime import date
 import argparse
-# import sys; sys.path.append("../")
-import sys; sys.path.append('/home/ccollado/phi2FM/pretrain/models')
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -39,9 +37,8 @@ from models.model_Seco import seasonal_contrast
 from models.model_Resnet50 import resnet
 from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor
 
-# from models.model_foundation.model_foundation_local_rev2 import get_phisat2_model, pretrained_phisat2_downstream, load_pretrained_model
-from utils_fm import get_phisat2_model
-from models.phisatnet.phisatnet_downstream import phisatnet_downstream
+from pretrain.models.utils_fm import get_phisat2_model
+from downstream.models.phisatnet_downstream import PhiSatNetDownstream
 
 
 from utils import data_protocol
@@ -244,7 +241,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
     if model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
         core_kwargs = get_phisat2_model(model_size='xsmall', unet_type='geoaware')
         print(f'core_kwargs: {core_kwargs}')
-        model = phisatnet_downstream(pretrained_path=path_model_weights, 
+        model = PhiSatNetDownstream(pretrained_path=path_model_weights, 
                                      task='segmentation' if model_name == 'phisatnet' else 'classification',
                                      input_dim=input_channels,
                                      output_dim=output_channels,
