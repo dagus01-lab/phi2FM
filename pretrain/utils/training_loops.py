@@ -679,7 +679,7 @@ class TrainFoundation(TrainBase):
 
 
                 decay, no_decay = split_decay_no_decay(named_params)
-                print(len(decay), len(no_decay))
+                print(f'# params weight decay: {len(decay)}, # params no weight decay: {len(no_decay)}')
                 return [
                     {'params': decay,    'lr': lr, 'weight_decay': 5e-4},
                     {'params': no_decay, 'lr': lr, 'weight_decay': 0.0},
@@ -1785,7 +1785,7 @@ class TrainFoundation(TrainBase):
             
             # Convert running_metric to a PyTorch tensor so we can all_reduce it
             metric_tensor = torch.tensor(running_metric, dtype=torch.float64, device=self.device)
-            
+
             if dist.is_available() and dist.is_initialized():
                 dist.all_reduce(metric_tensor, op=dist.ReduceOp.SUM)
 
@@ -1809,20 +1809,6 @@ class TrainFoundation(TrainBase):
             else:
                 # On non-zero ranks, return an empty dict or None
                 return {}
-
-            # running_metric: array with sums of each metric
-            # [coords_mse, coords_mae, climate_acc, recon_mse, zoom_mse, zoom_mae]
-            final_metrics = {}
-            final_metrics['coords_mse'] = running_metric[0] / (k + 1)
-            final_metrics['coords_mae'] = running_metric[1] / (k + 1)
-            final_metrics['climate_acc'] = running_metric[2] / (k + 1)
-            final_metrics['reduced_climate_acc'] = running_metric[4] / (k + 1)
-            final_metrics['recon_mse'] = running_metric[3] / (k + 1)
-            if self.apply_zoom:
-                final_metrics['zoom_mse'] = running_metric[5] / (k + 1)
-                final_metrics['zoom_mae'] = running_metric[6] / (k + 1)
-
-            return final_metrics
 
         elif (images is None) and (labels is None):
             # Initialize metrics accumulator
