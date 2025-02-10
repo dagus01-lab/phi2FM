@@ -675,6 +675,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
 
     # Check and print the shape of the first element in each dataset, if available
+    model_summary = summary(model, input_size=(batch_size, input_channels, input_size, input_size))
+    import pdb; pdb.set_trace()
     if world_rank == 0:
         print("Dataset protocol: ", dataset_name)
 
