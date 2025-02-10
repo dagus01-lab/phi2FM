@@ -41,7 +41,7 @@ class MultiTaskLoss(nn.Module):
             self.scale_geo = 1.
 
             if self.apply_zoom:
-                raise NotImplementedError('While the zoom task is implemented, it should not be used in this model')
+                raise NotImplementedError('While the zoom task is implemented, it should not be used')
                 self.log_sigma_zoom = nn.Parameter(torch.zeros(1)) # For zoom level
                 self.scale_zoom = 1.
         
@@ -112,27 +112,20 @@ class MultiTaskLoss(nn.Module):
         return tv_loss
 
     def forward(self, output, labels):
-        '''
-        output: Dict containing model outputs
-        labels: Dict containing ground truth labels
-
-        output keys: "reconstruction", "climate", "coords", "zoom_factor"
-        label keys: "reconstruction", "climate", "coords", "zoom_factor"
-        '''
         if self.fixed_task is None:
             # Ensure that log_sigma values are within a reasonable range
-            self.log_sigma_recon.data.clamp_(min=-2, max=1)
-            self.log_sigma_clim.data.clamp_(min=-2, max=1)
-            self.log_sigma_geo.data.clamp_(min=-2, max=1)
+            self.log_sigma_recon.data.clamp_(min=-3, max=3)
+            self.log_sigma_clim.data.clamp_(min=-3, max=3)
+            self.log_sigma_geo.data.clamp_(min=-3, max=3)
             
             if self.climate_segm:
-                self.log_sigma_tv.data.clamp_(min=-2, max=1)
+                self.log_sigma_tv.data.clamp_(min=-3, max=3)
 
             if self.apply_zoom:
-                self.log_sigma_zoom.data.clamp_(min=-2, max=1)
+                self.log_sigma_zoom.data.clamp_(min=-3, max=3)
             
             if self.perceptual_loss:
-                self.log_sigma_perc.data.clamp_(min=-2, max=1)
+                self.log_sigma_perc.data.clamp_(min=-3, max=3)
 
         # Reconstruction Loss (Pixel-wise and Perceptual)
         if self.fixed_task is None or self.fixed_task == "reconstruction":

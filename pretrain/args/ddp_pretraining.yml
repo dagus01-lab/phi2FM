@@ -11,7 +11,7 @@ early_stop: 15
 epochs: 50
 input_channels: 8 # **********************************
 input_size: 224 # **********************************
-lr: 0.005
+lr: 0.001
 lr_scheduler: cosine_annealing
 n_shot: null
 split_ratio: 1.0

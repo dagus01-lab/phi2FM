@@ -608,12 +608,12 @@ class TrainFoundation(TrainBase):
                 print("Initial losses:", initial_losses)
                 print("Initializing scales of individual losses")
 
-            self.criterion.scale_recon = 5.0 / initial_losses['reconstruction']
+            self.criterion.scale_recon = 1.0 / initial_losses['reconstruction']
             self.criterion.scale_seg =   1.0 / initial_losses['climate']
             self.criterion.scale_geo =   1.0 / initial_losses['geolocation']
             
             if self.climate_segm:
-                self.criterion.scale_tv = 0.1 / initial_losses['total_variation']
+                self.criterion.scale_tv = 1.0 / initial_losses['total_variation']
             if self.apply_zoom:
                 self.criterion.scale_zoom = 1.0 / initial_losses['zoom_level']
             if self.perceptual_loss:
@@ -622,16 +622,16 @@ class TrainFoundation(TrainBase):
             if self.is_main_process:
                 print("Initializing log variances of each loss")
             with torch.no_grad():
-                self.criterion.log_sigma_recon.copy_(torch.tensor(0.0))
-                self.criterion.log_sigma_clim.copy_(torch.tensor(0.0))
-                self.criterion.log_sigma_geo.copy_(torch.tensor(0.0))
+                self.criterion.log_sigma_recon.copy_(torch.tensor(-1.5))
+                self.criterion.log_sigma_clim.copy_(torch.tensor(0.5))
+                self.criterion.log_sigma_geo.copy_(torch.tensor(0.5))
                 
                 if self.climate_segm:
-                    self.criterion.log_sigma_tv.copy_(torch.tensor(0.55))
+                    self.criterion.log_sigma_tv.copy_(torch.tensor(0.0))
                 if self.apply_zoom:
-                    self.criterion.log_sigma_zoom.copy_(torch.tensor(-0.5))
+                    self.criterion.log_sigma_zoom.copy_(torch.tensor(0.0))
                 if self.perceptual_loss:
-                    self.criterion.log_sigma_perc.copy_(torch.tensor(0.55))
+                    self.criterion.log_sigma_perc.copy_(torch.tensor(0.0))
                 
             log_sigma_params = [p for n, p in self.criterion.named_parameters() if 'log_sigma' in n]
 
@@ -682,13 +682,13 @@ class TrainFoundation(TrainBase):
 
                 decay, no_decay = split_decay_no_decay(named_params)
                 return [
-                    {'params': decay,    'lr': lr, 'weight_decay': 1e-3},
+                    {'params': decay,    'lr': lr, 'weight_decay': 5e-4},
                     {'params': no_decay, 'lr': lr, 'weight_decay': 0.0},
                 ]
 
             # Now create your overall param-group list:
             
-            self.lr_mult_sigma = 0.2
+            self.lr_mult_sigma = 1e-2
             self.lr_mult_weights = 1.0
             
             param_groups = []
@@ -736,7 +736,7 @@ class TrainFoundation(TrainBase):
             # relevant for reduce_on_plateau only
             min_lr = self.min_lr
             factor = 0.1
-            patience = 6
+            patience = 5
             
             # relevant for cosine_annealing only
             T_max = self.epochs - self.warmup_steps - 1
