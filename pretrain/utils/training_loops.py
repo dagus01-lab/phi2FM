@@ -651,8 +651,6 @@ class TrainFoundation(TrainBase):
                 head_recon_params = list(self.model.head_recon.named_parameters())
                 head_seg_params = list(self.model.head_seg.named_parameters())
 
-            import pdb; pdb.set_trace()
-
             def split_decay_no_decay(named_params):
                 decay_params, no_decay_params = [], []
                 for name, param in named_params:
@@ -660,7 +658,6 @@ class TrainFoundation(TrainBase):
                         continue
                     # If it's a bias, norm, or 1D weight (like LN/Bias), put it in no_decay
                     if param.ndim == 1 or 'bias' in name or 'norm' in name.lower():
-                        print(name)
                         no_decay_params.append(param)
                     else:
                         decay_params.append(param)
