@@ -1,4 +1,4 @@
-name: esa
+name: phisatnet
 channels:
   - conda-forge
   - defaults
@@ -21,4 +21,4 @@ dependencies:
   - conda-forge::timm
   - pytorch-lightning
   - scikit-multilearn
-prefix: /opt/anaconda3/envs/esa
+prefix: /opt/anaconda3/envs/phisatnet

@@ -163,6 +163,8 @@ def main(
     only_get_datasets: bool,
     min_lr: float,
     fixed_task: str,
+    train_precision: str,
+    val_precision: str,
 ):
     """
     Main function to train, test, and perform inference on a model.
@@ -325,6 +327,8 @@ def main(
         fixed_task=fixed_task,
         rank=world_rank,
         min_lr=min_lr,
+        train_precision=train_precision,
+        val_precision=val_precision,
     )
     
 

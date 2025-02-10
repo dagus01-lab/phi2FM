@@ -11,7 +11,7 @@ early_stop: 15
 epochs: 50
 input_channels: 8 # **********************************
 input_size: 224 # **********************************
-lr: 0.005
+lr: 0.0001
 lr_scheduler: cosine_annealing
 n_shot: null
 split_ratio: 1.0
@@ -20,10 +20,12 @@ warmup: True
 warmup_steps: 5
 warmup_gamma: null
 min_lr: 0.000001
-data_path: /home/ccollado/phileo_phisat2/MajorTOM/lmdb_patches_256_1536
+data_path: /home/phimultigpu/phisat2_foundation/lmdb_patches_256_1536
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference # **********************************
-output_path: /home/ccollado/phisat2_foundation/models
-data_parallel: False
-device_ids: [0]
+output_path: /home/phimultigpu/phisat2_foundation/models
+data_parallel: DDP
+device_ids: [2,3]
 only_get_datasets: False
 fixed_task: null
+train_precision: fp32
+val_precision: fp32

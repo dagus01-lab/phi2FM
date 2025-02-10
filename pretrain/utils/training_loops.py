@@ -27,12 +27,13 @@ class TrainBase():
                  test_loader: DataLoader, inference_loader: DataLoader, epochs:int = 50, early_stop:int=25, lr: float = 0.001, lr_scheduler: str = None, warmup:bool=True,
                  metrics: list = None, name: str="model", out_folder :str ="trained_models/", visualise_validation:bool=True, 
                  warmup_steps:int=5, warmup_gamma:int=10, pos_weight:np.array=None, weights:np.array=None, save_info_vars:tuple = None, apply_zoom:bool=False, 
-                 climate_segm:bool=False, fixed_task:str=None, rank:int=None, min_lr:float=1e-6, perceptual_loss:bool=False):
+                 climate_segm:bool=False, fixed_task:str=None, rank:int=None, min_lr:float=1e-6, perceptual_loss:bool=False,
+                 train_precision:str='fp32', val_precision:str='fp32'):
         
-        self.train_mode = 'fp32' # choose between 'fp32', 'amp', 'fp16'
-        self.val_mode = 'fp32' # choose between 'fp32', 'amp', 'fp16'
+        self.train_precision = train_precision # choose between 'fp32', 'amp', 'fp16'
+        self.val_precision = val_precision # choose between 'fp32', 'amp', 'fp16'
         
-        if self.train_mode == 'fp16':
+        if self.train_precision == 'fp16':
             self.model = model.half()
         else:
             self.model = model
@@ -48,7 +49,8 @@ class TrainBase():
         self.visualise_validation = visualise_validation if self.is_main_process else False
 
 
-        # print(f"Initializing weights. Model training with {self.train_mode}, and validating with {self.val_mode}")
+        if self.is_main_process:
+            print(f"Initializing weights. Model training with {self.train_precision}, and validating with {self.val_precision}")
         # self.model.apply(self.weight_init)
 
         self.test_loss = None
@@ -608,12 +610,12 @@ class TrainFoundation(TrainBase):
                 print("Initial losses:", initial_losses)
                 print("Initializing scales of individual losses")
 
-            self.criterion.scale_recon = 5.0 / initial_losses['reconstruction']
+            self.criterion.scale_recon = 1.0 / initial_losses['reconstruction']
             self.criterion.scale_seg =   1.0 / initial_losses['climate']
             self.criterion.scale_geo =   1.0 / initial_losses['geolocation']
             
             if self.climate_segm:
-                self.criterion.scale_tv = 0.1 / initial_losses['total_variation']
+                self.criterion.scale_tv = 1.0 / initial_losses['total_variation']
             if self.apply_zoom:
                 self.criterion.scale_zoom = 1.0 / initial_losses['zoom_level']
             if self.perceptual_loss:
@@ -622,16 +624,16 @@ class TrainFoundation(TrainBase):
             if self.is_main_process:
                 print("Initializing log variances of each loss")
             with torch.no_grad():
-                self.criterion.log_sigma_recon.copy_(torch.tensor(0.0))
-                self.criterion.log_sigma_clim.copy_(torch.tensor(0.0))
-                self.criterion.log_sigma_geo.copy_(torch.tensor(0.0))
+                self.criterion.log_sigma_recon.copy_(torch.tensor(-1.5))
+                self.criterion.log_sigma_clim.copy_(torch.tensor(0.5))
+                self.criterion.log_sigma_geo.copy_(torch.tensor(0.5))
                 
                 if self.climate_segm:
-                    self.criterion.log_sigma_tv.copy_(torch.tensor(0.55))
+                    self.criterion.log_sigma_tv.copy_(torch.tensor(0.0))
                 if self.apply_zoom:
-                    self.criterion.log_sigma_zoom.copy_(torch.tensor(-0.5))
+                    self.criterion.log_sigma_zoom.copy_(torch.tensor(0.0))
                 if self.perceptual_loss:
-                    self.criterion.log_sigma_perc.copy_(torch.tensor(0.55))
+                    self.criterion.log_sigma_perc.copy_(torch.tensor(0.0))
                 
             log_sigma_params = [p for n, p in self.criterion.named_parameters() if 'log_sigma' in n]
 
@@ -682,13 +684,13 @@ class TrainFoundation(TrainBase):
 
                 decay, no_decay = split_decay_no_decay(named_params)
                 return [
-                    {'params': decay,    'lr': lr, 'weight_decay': 1e-3},
+                    {'params': decay,    'lr': lr, 'weight_decay': 5e-4},
                     {'params': no_decay, 'lr': lr, 'weight_decay': 0.0},
                 ]
 
             # Now create your overall param-group list:
             
-            self.lr_mult_sigma = 0.2
+            self.lr_mult_sigma = 1e-3
             self.lr_mult_weights = 1.0
             
             param_groups = []
@@ -736,7 +738,7 @@ class TrainFoundation(TrainBase):
             # relevant for reduce_on_plateau only
             min_lr = self.min_lr
             factor = 0.1
-            patience = 6
+            patience = 5
             
             # relevant for cosine_annealing only
             T_max = self.epochs - self.warmup_steps - 1
@@ -942,7 +944,7 @@ class TrainFoundation(TrainBase):
                 images = images.to(device)
                 labels = {k: v.to(device) for k, v in labels.items()}
                 
-                if self.train_mode == 'fp16':
+                if self.train_precision == 'fp16':
                     images = images.half()
                     # labels = {k: v.half() for k, v in labels.items()}
                     
@@ -1255,7 +1257,7 @@ class TrainFoundation(TrainBase):
                 # GET LOSS
                 
                 # A) FP 32
-                if self.train_mode == 'fp32':
+                if self.train_precision == 'fp32':
                     outputs = self.model(images)
                     loss, log_loss = self.get_loss(outputs, labels)
                     
@@ -1265,7 +1267,7 @@ class TrainFoundation(TrainBase):
                     self.optimizer.step()
                     
                 # B) AMP
-                elif self.train_mode == 'amp':
+                elif self.train_precision == 'amp':
                     with autocast(dtype=torch.float16):
                         outputs = self.model(images)
                         loss, log_loss = self.get_loss(outputs, labels)
@@ -1286,7 +1288,7 @@ class TrainFoundation(TrainBase):
                     #         print(f"NaN/Inf detected in gradients of {name}!")
                     
                 # C) FP 16
-                elif self.train_mode == 'fp16':
+                elif self.train_precision == 'fp16':
                     outputs = self.model(images.half())
                     labels = {key: value.half() if value.dtype.is_floating_point else value for key, value in labels.items()}
                     loss, log_loss = self.get_loss(outputs, labels)
@@ -1409,7 +1411,7 @@ class TrainFoundation(TrainBase):
         
         # Set the model to eval mode and disable gradient computation
         self.model.eval()
-        if self.val_mode == 'fp16' and self.train_mode != 'fp16':
+        if self.val_precision == 'fp16' and self.train_precision != 'fp16':
             self.model.half()
 
         # Initialize accumulators
@@ -1430,18 +1432,18 @@ class TrainFoundation(TrainBase):
                 # GET LOSS
                 
                 # A) FP 32
-                if self.val_mode == 'fp32':
+                if self.val_precision == 'fp32':
                     outputs = self.model(images)
                     loss, log_loss = self.get_loss(outputs, labels)
                     
                 # B) AMP
-                elif self.val_mode == 'amp':
+                elif self.val_precision == 'amp':
                     with autocast(dtype=torch.float16):
                         outputs = self.model(images)
                         loss, log_loss = self.get_loss(outputs, labels)
                     
                 # C) FP 16
-                elif self.val_mode == 'fp16':                    
+                elif self.val_precision == 'fp16':                    
                     outputs = self.model(images.half())
                     outputs = {key: value.float() for key, value in outputs.items()}
                     loss, log_loss = self.get_loss(outputs, labels)
@@ -1475,7 +1477,7 @@ class TrainFoundation(TrainBase):
 
 
 
-        if self.val_mode == 'fp16' and self.train_mode != 'fp16':
+        if self.val_precision == 'fp16' and self.train_precision != 'fp16':
             self.model.float()
 
         # Visualization on the last batch (if enabled)
@@ -1753,18 +1755,18 @@ class TrainFoundation(TrainBase):
                 # GET LOSS
                 
                 # A) FP 32
-                if self.val_mode == 'fp32':
+                if self.val_precision == 'fp32':
                     outputs = self.model(images)
                     loss, log_loss = self.get_loss(outputs, labels)
                     
                 # B) AMP
-                elif self.val_mode == 'amp':
+                elif self.val_precision == 'amp':
                     with autocast(dtype=torch.float16):
                         outputs = self.model(images)
                         loss, log_loss = self.get_loss(outputs, labels)
                     
                 # C) FP 16
-                elif self.val_mode == 'fp16':                    
+                elif self.val_precision == 'fp16':                    
                     outputs = self.model(images.half())
                     outputs = {key: value.float() for key, value in outputs.items()}
                     loss, log_loss = self.get_loss(outputs, labels)
