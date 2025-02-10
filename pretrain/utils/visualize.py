@@ -711,57 +711,78 @@ def print_stats_table(stats_dict):
 
 
 
-
 def tabulate_losses(train_log_loss, val_log_loss, climate_segm, perceptual_loss):
 
-    # Helper function for formatting numbers in scientific notation
     def sci(x):
+        """Format numbers in scientific notation."""
         return f"{x:.3e}"
 
-    # Define headers and dynamically exclude "total_variation" if climate_segm is False
-    headers = ["reconstruction", "climate", "geolocation"]
 
-    if perceptual_loss:
-        headers.insert(2, "perceptual")
-
-    if climate_segm:
-        headers.insert(-1, "total_variation")
-
-    # Helper function to construct rows conditionally
     def construct_rows(log_loss):
-        rows = [
-            [f"Total Loss = {sci(log_loss['total_loss'])}",
-             sci(log_loss['loss_components']['reconstruction']),
-             sci(log_loss['loss_components']['perceptual']) if perceptual_loss else "",
-             sci(log_loss['loss_components']['climate'])] +
-            ([sci(log_loss['loss_components']['total_variation'])] if climate_segm else []) +
-            [sci(log_loss['loss_components']['geolocation'])],
+        """
+        Construct rows that match the header count:
+          1. A first column for the label ('Total Loss = ...', 'log_sigma', etc.)
+          2. Followed by reconstruction, [perceptual], climate, [total_variation], geolocation
+        """
+        
+        # Create headers. Notice the extra "" in front for the label column:
+        headers = [f"Total Loss = {sci(log_loss['total_loss'])}", "reconstruction", "climate", "geolocation"]
+        
+        if perceptual_loss:
+            # Insert 'perceptual' at index 2
+            headers.insert(2, "perceptual")
+        
+        if climate_segm:
+            # Insert 'total_variation' before the last element (geolocation)
+            headers.insert(-1, "total_variation")
 
-            ["log_sigma",
-             sci(log_loss['log_sigmas']['log_sigma_recon']),
-             sci(log_loss['log_sigmas']['log_sigma_perc']) if perceptual_loss else "",
-             sci(log_loss['log_sigmas']['log_sigma_clim'])] +
-            ([sci(log_loss['log_sigmas']['log_sigma_tv'])] if climate_segm else []) +
-            [sci(log_loss['log_sigmas']['log_sigma_geo'])],
-
-            ["scaled_loss",
-             sci(log_loss['scaled_loss']['reconstruction']),
-             sci(log_loss['scaled_loss']['perceptual']) if perceptual_loss else "",
-             sci(log_loss['scaled_loss']['climate'])] +
-            ([sci(log_loss['scaled_loss']['total_variation'])] if climate_segm else []) +
-            [sci(log_loss['scaled_loss']['geolocation'])]
+        # Row for 'Total Loss'
+        row1 = [
+            "loss",
+            sci(log_loss['loss_components']['reconstruction']),
         ]
-        return rows
+        if perceptual_loss:
+            row1.append(sci(log_loss['loss_components']['perceptual']))
+        row1.append(sci(log_loss['loss_components']['climate']))
+        if climate_segm:
+            row1.append(sci(log_loss['loss_components']['total_variation']))
+        row1.append(sci(log_loss['loss_components']['geolocation']))
 
-    # Construct rows for training and validation data
-    train_rows = construct_rows(train_log_loss)
-    val_rows = construct_rows(val_log_loss)
+        # Row for 'log_sigma'
+        row2 = [
+            "log_sigma",
+            sci(log_loss['log_sigmas']['log_sigma_recon']),
+        ]
+        if perceptual_loss:
+            row2.append(sci(log_loss['log_sigmas']['log_sigma_perc']))
+        row2.append(sci(log_loss['log_sigmas']['log_sigma_clim']))
+        if climate_segm:
+            row2.append(sci(log_loss['log_sigmas']['log_sigma_tv']))
+        row2.append(sci(log_loss['log_sigmas']['log_sigma_geo']))
+
+        # Row for 'scaled_loss'
+        row3 = [
+            "scaled_loss",
+            sci(log_loss['scaled_loss']['reconstruction']),
+        ]
+        if perceptual_loss:
+            row3.append(sci(log_loss['scaled_loss']['perceptual']))
+        row3.append(sci(log_loss['scaled_loss']['climate']))
+        if climate_segm:
+            row3.append(sci(log_loss['scaled_loss']['total_variation']))
+        row3.append(sci(log_loss['scaled_loss']['geolocation']))
+
+        return headers, [row1, row2, row3]
+
+    # Build rows for train and validation
+    train_header, train_rows = construct_rows(train_log_loss)
+    val_headers, val_rows = construct_rows(val_log_loss)
 
     # Print the tables
     print("Train Loss Table:")
-    print(tabulate(train_rows, headers=headers, tablefmt="simple", floatfmt=".3e"))
+    print(tabulate(train_rows, headers=train_header, tablefmt="simple", floatfmt=".3e"))
     print("\nValidation Loss Table:")
-    print(tabulate(val_rows, headers=headers, tablefmt="simple", floatfmt=".3e"))
+    print(tabulate(val_rows, headers=val_headers, tablefmt="simple", floatfmt=".3e"))
 
 
 
