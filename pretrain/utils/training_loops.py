@@ -671,13 +671,10 @@ class TrainFoundation(TrainBase):
                 and one without.
                 """
                 # Convert to named list in case user passed just a list of params
-                # or param modules. The user might pass in a plain list, 
-                # so we handle that:
                 if all(isinstance(p, nn.Parameter) for p in params):
                     # If it's a plain list of parameters, artificially name them
                     named_params = [(f"p{i}", p) for i, p in enumerate(params)]
                 else:
-                    # Otherwise, assume it's something like model.named_parameters()
                     named_params = list(params)
 
 
@@ -688,7 +685,7 @@ class TrainFoundation(TrainBase):
                     {'params': no_decay, 'lr': lr, 'weight_decay': 0.0},
                 ]
 
-            # Now create your overall param-group list:
+            # overall param-group list:
             
             self.lr_mult_sigma = 1e-3
             self.lr_mult_weights = 1.0
@@ -701,25 +698,10 @@ class TrainFoundation(TrainBase):
             param_groups += make_decay_no_decay_groups(head_recon_params,    lr=self.learning_rate * self.lr_mult_weights) # groups 8 and 9
             param_groups += make_decay_no_decay_groups(head_seg_params,      lr=self.learning_rate * self.lr_mult_weights) # groups 10 and 11
 
-            # Finally, instantiate the optimizer
             optimizer = torch.optim.AdamW(param_groups)
 
-
-
-
-            # optimizer = torch.optim.AdamW([
-            #     {"params": log_sigma_params,    "lr": self.learning_rate * 1.0},   # param_group 0
-            #     {"params": stem_encoder_params, "lr": self.learning_rate * 1.0},   # param_group 1
-            #     {"params": decoder_params,      "lr": self.learning_rate * 1.0},   # param_group 2
-            #     {"params": head_geo_params,     "lr": self.learning_rate * 1.0},   # param_group 3
-            #     {"params": head_recon_params,   "lr": self.learning_rate * 1.0},   # param_group 4
-            #     {"params": head_seg_params,     "lr": self.learning_rate * 1.0},   # param_group 5
-            # ], weight_decay=1e-4)
-            
-            # for i, param_group in enumerate(optimizer.param_groups):
-            #     print(f"Layer {i + 1} learning rate: {param_group['lr']}")
-
         else:
+            # If training a fixed task
             optimizer = torch.optim.AdamW(self.model.parameters(),
                                         lr=self.learning_rate, eps=1e-06)
 
