@@ -14,7 +14,7 @@ input_size: 224 # **********************************
 lr: 0.005
 lr_scheduler: cosine_annealing
 n_shot: null
-split_ratio: 1.0
+split_ratio: 0.000035
 vis_val: True
 warmup: True
 warmup_steps: 5
@@ -27,3 +27,5 @@ data_parallel: False
 device_ids: [0]
 only_get_datasets: False
 fixed_task: null
+train_precision: fp32
+val_precision: fp32

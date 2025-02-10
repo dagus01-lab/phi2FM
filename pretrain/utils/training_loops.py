@@ -638,19 +638,20 @@ class TrainFoundation(TrainBase):
             log_sigma_params = [p for n, p in self.criterion.named_parameters() if 'log_sigma' in n]
 
             if isinstance(self.model, nn.DataParallel) or isinstance(self.model, nn.parallel.DistributedDataParallel):
-                stem_encoder_params = list(self.model.module.stem.parameters()) + list(self.model.module.encoder.parameters())
-                decoder_params = list(self.model.module.decoder.parameters())
-                head_geo_params = list(self.model.module.head_geo.parameters())
-                head_recon_params = list(self.model.module.head_recon.parameters())
-                head_seg_params = list(self.model.module.head_seg.parameters())
+                stem_encoder_params = list(self.model.module.stem.named_parameters()) + list(self.model.module.encoder.named_parameters())
+                decoder_params = list(self.model.module.decoder.named_parameters())
+                head_geo_params = list(self.model.module.head_geo.named_parameters())
+                head_recon_params = list(self.model.module.head_recon.named_parameters())
+                head_seg_params = list(self.model.module.head_seg.named_parameters())
+                                
             else:
-                stem_encoder_params = list(self.model.stem.parameters()) + list(self.model.encoder.parameters())
-                decoder_params = list(self.model.decoder.parameters())
-                head_geo_params = list(self.model.head_geo.parameters())
-                head_recon_params = list(self.model.head_recon.parameters())
-                head_seg_params = list(self.model.head_seg.parameters())
+                stem_encoder_params = list(self.model.stem.named_parameters()) + list(self.model.encoder.named_parameters())
+                decoder_params = list(self.model.decoder.named_parameters())
+                head_geo_params = list(self.model.head_geo.named_parameters())
+                head_recon_params = list(self.model.head_recon.named_parameters())
+                head_seg_params = list(self.model.head_seg.named_parameters())
 
-
+            import pdb; pdb.set_trace()
 
             def split_decay_no_decay(named_params):
                 decay_params, no_decay_params = [], []
@@ -659,6 +660,7 @@ class TrainFoundation(TrainBase):
                         continue
                     # If it's a bias, norm, or 1D weight (like LN/Bias), put it in no_decay
                     if param.ndim == 1 or 'bias' in name or 'norm' in name.lower():
+                        print(name)
                         no_decay_params.append(param)
                     else:
                         decay_params.append(param)
@@ -683,6 +685,7 @@ class TrainFoundation(TrainBase):
 
 
                 decay, no_decay = split_decay_no_decay(named_params)
+                print(len(decay), len(no_decay))
                 return [
                     {'params': decay,    'lr': lr, 'weight_decay': 5e-4},
                     {'params': no_decay, 'lr': lr, 'weight_decay': 0.0},
