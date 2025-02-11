@@ -52,10 +52,6 @@ class PhiSatNetDownstream(nn.Module):
         self.output_dim = output_dim
         self.depths = depths
         self.dims = dims
-        self.decoder_dims = dims.copy()
-        self.bottleneck_dim = 640
-        self.decoder_dims[-1] = self.bottleneck_dim
-        print(f"encoder_dims: {dims}, decoder_dims: {self.decoder_dims}")
         self.norm_foundation = norm_foundation
         self.norm_downstream = norm_downstream
         self.activation = activation
@@ -97,25 +93,25 @@ class PhiSatNetDownstream(nn.Module):
             self.bridge = nn.Sequential(
                 CoreCNNBlock(
                     in_channels=self.dims[-1],
-                    out_channels=self.decoder_dims[-1],
+                    out_channels=self.dims[-1],
                     norm=self.norm_downstream,
                     activation=self.activation,
                 )
             )
             self.decoder = FoundationDecoder(
                 depths=self.depths,
-                dims=self.decoder_dims,
+                dims=self.dims,
                 norm=self.norm_downstream,
                 activation=self.activation,
             )
             self.head = nn.Sequential(
                 CoreCNNBlock(
-                    in_channels=self.decoder_dims[0],
-                    out_channels=self.decoder_dims[0],
+                    in_channels=self.dims[0],
+                    out_channels=self.dims[0],
                     norm=self.norm_downstream,
                     activation=self.activation,
                 ),
-                nn.Conv2d(self.decoder_dims[0], self.output_dim, kernel_size=1, padding=0)
+                nn.Conv2d(self.dims[0], self.output_dim, kernel_size=1, padding=0)
             )
         elif self.task == "classification":
             # Head (no pretrained weights used here).
@@ -124,7 +120,7 @@ class PhiSatNetDownstream(nn.Module):
             self.head = nn.Sequential(
                 nn.AdaptiveAvgPool2d((1, 1)),
                 nn.Flatten(),
-                nn.Linear(self.decoder_dims[-1], self.output_dim)
+                nn.Linear(self.dims[-1], self.output_dim)
             )
         else:
             raise ValueError(f"Task {self.task} not recognized. Must be either 'segmentation' or 'classification'.")

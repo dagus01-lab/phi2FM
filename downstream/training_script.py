@@ -675,8 +675,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
 
     # Check and print the shape of the first element in each dataset, if available
-    model_summary = summary(model, input_size=(batch_size, input_channels, input_size, input_size))
-    import pdb; pdb.set_trace()
     if world_rank == 0:
         print("Dataset protocol: ", dataset_name)
 
@@ -799,7 +797,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
 
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     
     if additional_inference == 'train_test_inference':
         trainer.train()
@@ -862,6 +860,12 @@ if __name__ == "__main__":
     else:
         args = parser.parse_args()
 
-    main(**vars(args))
+    if True:
+        for n_shot in [50, 100, 1000, 5000]:
+            args.n_shot = n_shot
+            main(**vars(args))
+
+    else:
+        main(**vars(args))
 
     print('Finished')

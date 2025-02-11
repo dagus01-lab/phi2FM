@@ -243,7 +243,7 @@ class TrainBase():
         train_loss = 0.0
         # Initialize the progress bar for training
         train_pbar = tqdm(self.train_loader, total=len(self.train_loader),
-                          desc=f"Epoch {epoch + 1}/{self.epochs}")
+                          desc=f"Train {epoch + 1}/{self.epochs}")
 
         # loop training through batches
         for i, (images, labels) in enumerate(train_pbar):
@@ -281,7 +281,7 @@ class TrainBase():
 
         # Initialize the progress bar for training
         val_pbar = tqdm(self.val_loader, total=len(self.val_loader),
-                          desc=f"Epoch {epoch + 1}/{self.epochs}")
+                          desc=f"Val {epoch + 1}/{self.epochs}")
 
         with torch.no_grad():
             self.model.eval()
@@ -296,7 +296,7 @@ class TrainBase():
 
                 # display progress on console
                 val_pbar.set_postfix({
-                    "val_loss": f"{val_loss / (j + 1):.4f}",
+                    "loss": f"{val_loss / (j + 1):.4f}",
                     f"lr": self.optimizer.param_groups[0]['lr']})
 
             if self.visualise_validation:
