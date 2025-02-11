@@ -3,6 +3,9 @@ import torch
 import onnxruntime as ort
 import numpy as np
 
+from pretrain.models.utils_fm import get_phisat2_model
+from downstream.models.phisatnet_downstream import PhiSatNetDownstream
+
 # === Parse command-line arguments ===
 def parse_args():
     parser = argparse.ArgumentParser(description="Script to test memory usage and ONNX conversion.")
@@ -26,8 +29,6 @@ def main():
 
     # ==== The rest of your script (with minor modifications to use the variables) ====
     
-    from models.utils_fm import get_phisat2_model
-
     torch.cuda.reset_peak_memory_stats()  # Reset peak memory metrics
     memory_initial = torch.cuda.memory_allocated()
 
@@ -43,12 +44,15 @@ def main():
             return torch.randn(batch_size, channels, height, width).to(device)
 
     # Load the model with the specified size
-    model = get_phisat2_model(
-        model_size=model_size,
-        return_model=f'downstream_{task}',
-        input_dim=8,
-        img_size=input_size
-    )
+    core_kwargs = get_phisat2_model(model_size=model_size, unet_type='geoaware')
+        model = PhiSatNetDownstream(pretrained_path=None, 
+                                     task=task,
+                                     input_dim=8,
+                                     output_dim=8,
+                                     freeze_body=True,
+                                     img_size=input_size,
+                                     **core_kwargs
+                                    )
     model.eval()
 
     for name, module in model.named_modules():

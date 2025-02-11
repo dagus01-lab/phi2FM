@@ -14,11 +14,20 @@ __pycache__/
 github
 github.pub
 
-# Ignore model checkpoints or large data files (if applicable)
+# Ignore model checkpoints
+
+# PyTorch
 *.pth
 *.pt
 *.ckpt
+
+# ONNX
 *.onnx
+
+# OV
+*.bin
+*.mapping
+*.xml
 
 # Ignore system-specific files
 .DS_Store
