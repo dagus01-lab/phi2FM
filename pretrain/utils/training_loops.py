@@ -1320,7 +1320,7 @@ class TrainFoundation(TrainBase):
                     if self.fixed_task is None:
                         train_pbar.set_postfix({
                             "loss": f"{train_loss / (i + 1):.4f}",
-                            "lr": self.optimizer.param_groups[1]['lr']
+                            "lr": self.optimizer.param_groups[2]['lr']
                         })
                     else:
                         train_pbar.set_postfix({
@@ -1449,7 +1449,7 @@ class TrainFoundation(TrainBase):
                     if self.fixed_task is None:
                         val_pbar.set_postfix({
                             "loss": f"{val_loss / (j + 1):.4f}",
-                            "lr": self.optimizer.param_groups[1]['lr']
+                            "lr": self.optimizer.param_groups[2]['lr']
                         })
                     else:
                         val_pbar.set_postfix({
