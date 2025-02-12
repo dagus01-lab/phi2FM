@@ -2181,7 +2181,7 @@ class TrainFoundation(TrainBase):
             }
         }
         
-        with open(f"{self.out_folder}/artifacts_{self.rank}.json", "w") as outfile:
+        with open(f"{self.out_folder}/artifacts.json", "w") as outfile:
             json.dump(artifacts, outfile, indent=4)
 
         if self.test_metrics is not None:
