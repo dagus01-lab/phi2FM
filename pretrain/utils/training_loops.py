@@ -868,7 +868,7 @@ class TrainFoundation(TrainBase):
         return loss, log_loss
 
 
-    def estimate_initial_losses(self, model, loss_fn, dataloader, device, num_batches=None):
+    def estimate_initial_losses(self, model, loss_fn, dataloader, device, num_batches=10):
         """
         Runs a few batches from 'dataloader' to compute average losses
         for each task, with a progress bar.

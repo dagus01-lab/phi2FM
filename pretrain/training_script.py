@@ -180,7 +180,7 @@ def main(
         model_device, generator_device = device, 'cpu'
         print(f'Using DDP: rank {world_rank}/{world_size}, device {device}')
     else:
-        world_rank, world_size = 0, 1
+        world_rank, local_rank, world_size = 0, 0, 1
         if model_device == 'cuda':
             model_device = f'cuda:{device_ids[0]}' if device_ids else 'cuda'
         torch.set_default_device(model_device)
@@ -280,7 +280,7 @@ def main(
         input_size=input_size,
         fixed_task=fixed_task,
         use_ddp=(data_parallel == 'DDP'),
-        rank=world_rank,
+        rank=world_rank, # world_rank and not local_rank so each process gets a unique subset
         world_size=world_size,
         split_ratio=split_ratio,
     )
@@ -325,7 +325,7 @@ def main(
         save_info_vars=(model_summary, n_shot, split_ratio, warmup, init_lr),
         apply_zoom=False,
         fixed_task=fixed_task,
-        rank=world_rank,
+        rank=world_rank, # world_rank and not local_rank because we just use it for is_main_process
         min_lr=min_lr,
         train_precision=train_precision,
         val_precision=val_precision,

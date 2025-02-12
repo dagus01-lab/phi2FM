@@ -1,24 +1,24 @@
-name: phisatnet
+name: esa-phisatnet
 channels:
   - conda-forge
-  - defaults
+  - nvidia
+  - pytorch
 dependencies:
   - python=3.9.19
   - pyyaml
   - matplotlib
   - numpy
   - pandas
-  - cpuonly
-  - pytorch=2.4.0
-  - torchaudio=2.4.0
-  - torchvision=0.19.0
+  - pytorch::pytorch=2.4.0
+  - pytorch::torchvision=0.19.0
+  - pytorch::torchaudio=2.4.0
+  - nvidia::cuda=12.1
   - torchinfo
   - tabulate
-  - conda-forge::python-lmdb
-  - conda-forge::tqdm
+  - python-lmdb
+  - tqdm
   - scipy
-  - gdal
-  - conda-forge::timm
+  - conda-forge::gdal
+  - timm
   - pytorch-lightning
   - scikit-multilearn
-prefix: /opt/anaconda3/envs/phisatnet
