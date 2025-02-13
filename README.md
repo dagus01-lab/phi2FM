@@ -1,6 +1,6 @@
 # ΦsatNet
 
-**You can find a better description of each part of the code in the README inside each folder (`pretrain`, `downstream`, `data_simulation`)**
+**You can find a better description of each part of the code in the README inside each folder (`pretrain`, `downstream`, `data_simulation`, `myriad_2`)**
 
 ## Prerequisites
 
