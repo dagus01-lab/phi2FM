@@ -199,8 +199,6 @@ class TrainBase():
     def get_metrics(self, images=None, labels=None, running_metric=None, k=None):
         
         if (running_metric is not None) and (k is not None):
-            metric_names = ['mse','mae','mave','acc','precision','recall','baseline_mse']
-            # intermediary_values = ['mse','mae','mave','acc','tp','fp','fn','baseline_mse']
 
             final_metrics = {'mse':running_metric[0] / (k + 1), 'mae':running_metric[1] / (k + 1), 'mave':running_metric[2] / (k + 1), 'acc':running_metric[3]/ (k + 1), 'precision':running_metric[4]/(running_metric[4]+running_metric[5]), 'recall':running_metric[4]/(running_metric[4]+running_metric[6]), 'baseline_mse':running_metric[7] / (k + 1)}
             final_metrics['f1'] = 2 * final_metrics['precision'] * final_metrics['recall'] / (final_metrics['precision'] + final_metrics['recall'])
@@ -209,7 +207,7 @@ class TrainBase():
 
         elif (images == None) and (labels == None):
             intermediary_values = ['mse','mae','mave','acc','tp','fp','fn','baseline_mse']
-            metric_init = np.zeros(len(intermediary_values)) # 
+            metric_init = np.zeros(len(intermediary_values))
             return  metric_init
         
         
@@ -458,55 +456,6 @@ class TrainBase():
         with open(f"{self.out_folder}/artifacts_inference.json", "w") as outfile:
             json.dump(artifacts, outfile, indent=4)
 
-
-    '''
-    def load_weights(self, path):
-        self.model.load_state_dict(torch.load(path))
-
-    def test_samples(self, plot_name='test_samples', images=None, labels=None):
-        self.model.eval()
-        num_samples = 5  # Number of samples to visualize
-        
-        with torch.no_grad():
-            images_sample = []
-            labels_sample = []
-
-            if images is None or labels is None:
-                # Randomly choose 5 batches from the dataloader if no images are provided
-                batch_list = list(self.test_loader)
-                selected_batches = random.sample(batch_list, num_samples)
-                
-                for batch in selected_batches:
-                    img, lbl = batch
-                    img = img.to(self.device)
-                    lbl = lbl.to(self.device)
-
-                    # Select a random image from each batch
-                    index = random.choice(range(img.size(0)))
-                    images_sample.append(img[index])
-                    labels_sample.append(lbl[index])
-                
-                images_sample = torch.stack(images_sample)
-                labels_sample = torch.stack(labels_sample)
-
-            else:
-                # Use the provided images and labels
-                images_sample = images.to(self.device)
-                labels_sample = labels.to(self.device)
-            
-            # Forward pass on the selected images
-            outputs = self.model(images_sample)
-            
-            images_sample = images_sample.detach().cpu().numpy()
-            labels_sample = labels_sample.detach().cpu().numpy()
-            outputs = outputs.detach().cpu().numpy()
-            
-            # Visualization
-            self.val_visualize(images_sample, labels_sample, outputs, 
-                            name=plot_name)
-            
-            return images_sample, labels_sample, outputs
-    '''
 
     def save_info(self, model_summary=None, n_shot=None, p_split=None, warmup=None, lr=None):
         print("Saving artifacts...")
@@ -896,37 +845,69 @@ class TrainClassificationBuildings(TrainBase):
                                               save_path=f"{self.out_folder}/{name}.png")
 
     def get_metrics(self, images=None, labels=None, running_metric=None, k=None):
-
+        
         if (running_metric is not None) and (k is not None):
-            metric_names = ['mse','mae','mave','acc','precision','recall','baseline_mse']
-            # intermediary_values = ['mse','mae','mave','acc','tp','fp','fn','baseline_mse']
-
-            final_metrics = {'mse':running_metric[0] / (k + 1), 'mae':running_metric[1] / (k + 1), 'acc':running_metric[2]/ (k + 1)}
-
+            # For the aggregated branch we assume that running_metric[4:7] contain the global TP, FP, FN.
+            tp_global = running_metric[4]
+            fp_global = running_metric[5]
+            fn_global = running_metric[6]
+            
+            precision_micro = tp_global / (tp_global + fp_global + 1e-8)
+            recall_micro    = tp_global / (tp_global + fn_global + 1e-8)
+            f1_micro        = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + 1e-8)
+            
+            
+            final_metrics = {
+                'mse': running_metric[0] / (k + 1),
+                'mae': running_metric[1] / (k + 1),
+                'mave': running_metric[2] / (k + 1),
+                'acc': running_metric[3] / (k + 1),
+                'precision_micro': precision_micro,
+                'recall_micro': recall_micro,
+                'f1_micro': f1_micro,
+                'baseline_mse': running_metric[7] / (k + 1)
+            }
             return final_metrics
 
-        elif (images == None) and (labels == None):
-            intermediary_values = ['mse','mae','acc']
-            metric_init = np.zeros(len(intermediary_values)) #
-            return  metric_init
+        elif (images is None) and (labels is None):
+            intermediary_values = ['mse', 'mae', 'mave', 'acc', 'tp_micro', 'fp_micro', 'fn_micro', 'baseline_mse', 'f1_micro']
+            metric_init = np.zeros(len(intermediary_values))
+            return metric_init
 
         else:
             outputs = self.model(images)
-
-            # regression metrics
+            
+            # ----- Regression Metrics -----
             error = outputs - labels
             squared_error = error ** 2
-            test_mse = squared_error.mean().item()
-            test_mae = error.abs().mean().item()
-            # test_mave = torch.mean(torch.abs(outputs.mean(dim=(1, 2)) - labels.mean(dim=(1, 2)))).item()
+            test_mse  = squared_error.mean().item()
+            test_mae  = error.abs().mean().item()
+            test_mave = torch.mean(torch.abs(outputs.mean(dim=1) - labels.mean(dim=1))).item()
 
-            # regression metrics disguised as classification
-            output_classification = outputs.argmax(axis=1).flatten()
-            label_classification = labels.argmax(axis=1).flatten()
-
-            test_accuracy = (label_classification == output_classification).type(torch.float).mean().item()
-
-            return np.array([test_mse, test_mae, test_accuracy])
+            # ----- Classification Metrics -----
+            threshold = 0.5
+            # Convert to binary predictions/labels.
+            label_classification  = (labels > threshold).int()  # Shape: (batch_size, num_classes)
+            output_classification = (outputs > threshold).int()  # Shape: (batch_size, num_classes)
+            
+            # --- Micro F1 ---
+            # Compute overall true positives, false positives, and false negatives.
+            tp_micro = ((output_classification == 1) & (label_classification == 1)).sum().item()
+            fp_micro = ((output_classification == 1) & (label_classification == 0)).sum().item()
+            fn_micro = ((output_classification == 0) & (label_classification == 1)).sum().item()
+            precision_micro = tp_micro / (tp_micro + fp_micro + 1e-8)
+            recall_micro    = tp_micro / (tp_micro + fn_micro + 1e-8)
+            f1_micro        = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + 1e-8)
+            
+            # Compute overall accuracy.
+            test_accuracy = (label_classification == output_classification).float().mean().item()
+            test_zero_model_mse = (labels ** 2).mean().item()
+            
+            # Return metrics as a NumPy array.
+            # Order: mse, mae, mave, acc, tp_micro, fp_micro, fn_micro, baseline_mse, f1_micro, f1_macro
+            return np.array([test_mse, test_mae, test_mave, test_accuracy,
+                            tp_micro, fp_micro, fn_micro, test_zero_model_mse,
+                            f1_micro])
 
 
 

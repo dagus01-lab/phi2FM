@@ -633,6 +633,10 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
     if isinstance(n_shot, int):
         OUTPUT_FOLDER = f'{OUTPUT_FOLDER}_{n_shot}'
+        
+        if n_shot == 0:
+            n_shot = 1
+            additional_inference = 'inference'
 
         x_train, y_train, x_val, y_val, pos_weight, weights = data_protocol.protocol_fewshot_memmapped(
             folder=dataset_folder,
@@ -678,10 +682,10 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     if world_rank == 0:
         print("Dataset protocol: ", dataset_name)
 
-        if len(x_test) == len(x_inference) and all(np.array_equal(a, b) for a, b in zip(x_test, x_inference)):
-            print("Inference data is the same as test data.")
-        else:
-            print("Inference data is different from test data.")
+        # if len(x_test) == len(x_inference) and all(np.array_equal(a, b) for a, b in zip(x_test, x_inference)):
+        #     print("Inference data is the same as test data.")
+        # else:
+        #     print("Inference data is different from test data.")
 
         if len(x_train.array_list) > 0:
             print("Training set datapoint shape: X -", x_train.array_list[0].shape)
@@ -861,9 +865,18 @@ if __name__ == "__main__":
         args = parser.parse_args()
 
     if True:
-        for n_shot in [50, 100, 1000, 5000]:
+        for n_shot in [0]:
             args.n_shot = n_shot
-            main(**vars(args))
+            for freeze_pretrained in [True, False]:
+                args.freeze_pretrained = freeze_pretrained
+                if n_shot == 0 and not freeze_pretrained:
+                    continue
+                for downstream_task in ['', '_classification']:
+                    args.downstream_task = args.downstream_task + downstream_task
+                    args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
+                
+                    print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")
+                    main(**vars(args))
 
     else:
         main(**vars(args))

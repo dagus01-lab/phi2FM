@@ -1,7 +1,7 @@
 
 experiment_name: nshot_phi2/phi2_GeoAware
-downstream_task: lc
-model_name: GeoAware_mh_pred_core_nano   # **********************************
+downstream_task: lc_classification
+model_name: GeoAware_mh_pred_core_nano_classifier   # **********************************
 augmentations: True
 batch_size: 64
 model_device: cuda
