@@ -45,3 +45,6 @@ Thumbs.db
 
 # Ignore folder of simulation_aux_files
 simulation_aux_files/
+
+# Ignore zip files
+*.zip

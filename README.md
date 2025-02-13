@@ -33,6 +33,11 @@ Run downstream experiments (right now only for PhilEO-Bench).
 - If want to add new models, modify `models` folder, and add it to the `training_script.py` (the main file running everything).
 
 
+## 4. Myriad
+
+Explains how to convert the model to OpenVINO 2020.3
+
+- The conversion to ONNX should happen in the `downstream` folder tho (see `convert_to_onnx` function under `downstream/utils/utils.py`)
 
 
 

@@ -182,27 +182,10 @@ def dataloader_to_tensors(dataloader, device='cpu'):
     
     return all_x, all_y
 
-def convert_to_onnx(trainer, batch_size=32, input_size=224, num_channels=8, onnx_path = "phisatnet.onnx"):
+def convert_to_onnx(model, batch_size=32, input_size=224, num_channels=8, onnx_path = "phisatnet.onnx"):
     dummy_input = torch.randn(batch_size, num_channels, input_size, input_size)
-    trainer.model.eval()
-    torch.onnx.export(trainer.model, dummy_input, onnx_path, export_params=True, opset_version=9, do_constant_folding=True, input_names=['input'], output_names=['output'], dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
-
-    # dummy_input = torch.randn(batch_size, 8, input_size, input_size)
-    # torch.onnx.export(model, dummy_input, "model.onnx", opset_version=9)
-
-
-# def ddp_setup(rank, world_size):
-#     """
-#     Utility function to set up the distributed process group.
-#     """
-#     os.environ['MASTER_ADDR'] = 'localhost'
-#     os.environ['MASTER_PORT'] = '12355'
-#     # dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
-#     # If you want to use NCCL (faster on GPUs), make sure to do:
-#     dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-#     torch.cuda.set_device(rank)
-    
-#     return
+    model.eval()
+    torch.onnx.export(model, dummy_input, onnx_path, opset_version=9)
 
 
 def ddp_setup():

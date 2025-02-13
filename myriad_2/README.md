@@ -4,6 +4,7 @@ Follow these steps to initialize the Docker container with the OpenVINO environm
 
 ## Troubleshooting
 
+- **Run on Linux:** I was only able to run it on a native Linux machine (I used the Nvidia Jetson). I also tried on Windows, Mac, and WSL, but didn't work on any of them.
 - **Docker Issues:** Ensure Docker is installed, running, you have internet connection, and sufficient permissions.
 - **Model Conversion Errors:** Verify that your ONNX model is valid (used opset versions 12 or lower). Even if it is, some layers may still be incompatible with OpenVINO 2020.3 (e.g. MaxPool if using opset version 10).
 - **Script Errors:** Check that you are using the correct command-line arguments and file paths (Windows vs Unix).

@@ -1,5 +1,12 @@
 # 1. Data Simulation
 
+## Prerequisites
+
+- You need auxiliary files not in the GitHub (to keep it light). Download them at https://drive.google.com/drive/folders/13e5fYnHCBXXClE013dQzs91f-YPWcR3m?usp=sharing
+- Modify `data_simulation/__init__.py` file with the updated paths for the files.
+    - Update the `SHConfig` with your Sentinel Hub credentials
+    - Modify `base_folder`, `phileo_bench_folder`, and `pretrain_folder`
+
 
 ## PhilEO-Bench
 
