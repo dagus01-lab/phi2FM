@@ -36,3 +36,12 @@ Thumbs.db
 # Ignore .vscode folders
 .vscode/
 
+# Ignore MajorTOM cache
+*.parquet
+
+# Ignore csv
+*.csv
+
+
+# Ignore folder of simulation_aux_files
+simulation_aux_files/

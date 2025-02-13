@@ -15,4 +15,4 @@ classifiers = [
 ]
 
 [tool.setuptools]
-packages = ["pretrain", "downstream"]
+packages = ["pretrain", "downstream", "data_simulation"]

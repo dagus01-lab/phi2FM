@@ -216,7 +216,7 @@ def create_patches_from_tiffs(
 
 
 
-def process_file_image(file_image, index, output_dir, patch_size, crop_size):
+def process_file_image(file_image, index, output_dir, patch_size, crop_size, phi2_tif_path):
     
     processed_np_files = os.listdir(output_dir)
     s2_files = [file for file in processed_np_files if file.endswith('_s2.npy')]
@@ -226,7 +226,7 @@ def process_file_image(file_image, index, output_dir, patch_size, crop_size):
         return
 
     try:
-        tiff_path_phi2 = f'/home/ccollado/phileo_phisat2/MajorTOM/tiff_files/{file_image}.tif'
+        tiff_path_phi2 = f'{phi2_tif_path}/{file_image}.tif'
         
         partition = 'train'
         index_mod = index % 10
@@ -269,13 +269,11 @@ if __name__ == "__main__":
     crop_size = 1536
     parallel_processing = True
 
+    phi2_tif_path = '/home/ccollado/phileo_phisat2/MajorTOM/tiff_files'
     output_folder = f'MajorTOM/np_patches_{patch_size}_crop_{crop_size}'
     output_dir = f'/home/ccollado/phileo_phisat2/{output_folder}'
+    df_simulated = pd.read_csv('/home/ccollado/1_simulate_data/Major-TOM/df_existing.csv') # Which images to process
     os.makedirs(output_dir, exist_ok=True)
-
-    # What data to process
-    df_simulated = pd.read_csv('/home/ccollado/1_simulate_data/Major-TOM/df_existing.csv')
-    # df_simulated = df_simulated.iloc[:100]
 
     # Determine the number of workers
     max_workers = min(16, os.cpu_count() + 4)  # Adjust as needed
@@ -286,7 +284,7 @@ if __name__ == "__main__":
     if parallel_processing:
         # Initialize the progress bar and execute in parallel
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(process_file_image, file_image, idx, out_dir, patch_size, crop_size): idx for file_image, idx, out_dir in tasks}
+            futures = {executor.submit(process_file_image, file_image, idx, out_dir, patch_size, crop_size, phi2_tif_path): idx for file_image, idx, out_dir in tasks}
             
             for future in tqdm(as_completed(futures), total=len(futures), desc="Processing Images"):
                 idx = futures[future]
@@ -298,7 +296,7 @@ if __name__ == "__main__":
         # Sequential processing
         for file_image, idx, out_dir in tqdm(tasks, total=len(tasks), desc="Processing Images"):
             try:
-                process_file_image(file_image, idx, out_dir, patch_size, crop_size)  # Process each task sequentially
+                process_file_image(file_image, idx, out_dir, patch_size, crop_size, phi2_tif_path)  # Process each task sequentially
             except Exception as e:
                 print(f"Error processing image at index {idx}: {e}")
 

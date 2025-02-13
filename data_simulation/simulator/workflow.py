@@ -7,8 +7,6 @@ import os
 import re
 import sys
 
-os.chdir("/home/ccollado/1_simulate_data/phisat_2")
-
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
@@ -16,20 +14,16 @@ import geopandas as gpd
 import rasterio
 
 from eolearn.core import (
-    EOTask, 
-    EOPatch,
     EOWorkflow,
     FeatureType,
     MapFeatureTask,
     RemoveFeatureTask,
     linearly_connect_tasks,
-    EOExecutor,
 )
 from eolearn.features import SimpleFilterTask
 from eolearn.io import SentinelHubInputTask
 from eolearn.features.utils import spatially_resize_image as resize_images
 from sentinelhub import (
-    BBox,
     DataCollection,
     SHConfig,
     get_utm_crs,
@@ -41,15 +35,13 @@ from tqdm.auto import tqdm
 
 # Import local modules
 
-from phisat2_constants import (
+from data_simulation.simulator.phisat2_constants import (
     S2_BANDS,
     S2_RESOLUTION,
-    BBOX_SIZE,
     PHISAT2_RESOLUTION,
     ProcessingLevels,
-    WORLD_GDF,
 )
-from phisat2_utils import (
+from data_simulation.simulator.phisat2_utils import (
     AddPANBandTask,
     AddMetadataTask,
     CalculateRadianceTask,
@@ -60,11 +52,9 @@ from phisat2_utils import (
     PhisatCalculationTask,
     AlternativePhisatCalculationTask,
     CropTask,
-    GriddingTask,
-    ExportGridToTiff,
-    get_extent,
 )
-from utils import get_utm_bbox_from_top_left_and_size, AddLabelsTask, ExportEOPatchTask, PlotResultsTask, DownloadWOCloudSnow, AddDummyData
+from data_simulation.simulator.utils import get_utm_bbox_from_top_left_and_size, AddLabelsTask, ExportEOPatchTask, PlotResultsTask, DownloadWOCloudSnow, AddDummyData
+from data_simulation import phileo_s2_tif_path, phileo_phisat2_output_tiff_path, path_executable, month_counts_csv
 
 # ----------------------------------------------------------------
 
@@ -73,17 +63,14 @@ import warnings
 warnings.filterwarnings("ignore", category=SHDeprecationWarning)
 
 
-
 class phisat2simulation:
     def __init__(self, lat_topleft, lon_topleft, width_pixels, height_pixels, time_interval, 
                  output_file_name, roads_file, buildings_file,
                  maxcc=0.05, threshold_cloudless=0.05, threshold_snow = 0.4,
-                 process_level='l1c',
-                 folder_path_tifs='/home/ccollado/phileo_NFS/phileo_data/downstream/downstream_dataset_tifs', 
-                 output_path_tifs='/home/ccollado/1_simulate_data/phisat_2/tiff_folder', 
-                 exec_path="/home/ccollado/1_simulate_data/phisat_2/executables/phisat2_unix.bin",
-                 sh_client_id="01b7f489-bc50-46fd-825b-460d078ca88a", 
-                 sh_client_secret="cGGEjvkqmwzNhFFv9K0MGmdMhvZf1Nu6",
+                 process_level='L1C',
+                 folder_path_tifs=phileo_s2_tif_path, 
+                 output_path_tifs=phileo_phisat2_output_tiff_path, 
+                 exec_path=path_executable,
                  plot_results=False):
 
         self.lat_topleft = lat_topleft
@@ -101,8 +88,6 @@ class phisat2simulation:
         self.threshold_cloudless = threshold_cloudless
         self.threshold_snow = threshold_snow
         self.process_level = process_level
-        self.sh_client_id = sh_client_id
-        self.sh_client_secret = sh_client_secret
         self.plot_results = plot_results
         self.sh_config = self._set_sh_config()
         self.bbox = self._get_bbox()
@@ -110,15 +95,14 @@ class phisat2simulation:
         self.workflow, self.nodes, self.workflow_just_plot, self.nodes_just_plot, self.workflow_direct_download, self.nodes_direct_download = self._build_workflow()
 
     def _set_sh_config(self):
-        sh_config = SHConfig()
-        sh_config.sh_client_id = self.sh_client_id
-        sh_config.sh_client_secret = self.sh_client_secret
+        from data_simulation import sh_config
         return sh_config
 
     def _get_bbox(self):
         return get_utm_bbox_from_top_left_and_size(self.lat_topleft, self.lon_topleft, self.width_pixels, self.height_pixels)
 
     def _build_workflow(self):
+        print("Using product", self.process_level)
 
         aux_request_args = {"processing": {"upsampling": "BICUBIC"}}
         if self.process_level == 'L1C':
@@ -186,6 +170,7 @@ class phisat2simulation:
 
         cloud_and_download_bands_task = DownloadWOCloudSnow(threshold_cloudless = self.threshold_cloudless, threshold_snow = self.threshold_snow,
                                                          input_task_all_bands=input_task_all_bands, scl_download_task=scl_download_task,
+                                                         csv_file_path=month_counts_csv,
                                                          scl_cloud_snow_task = scl_cloud_snow_task) # defaults for cloud_detector_config and csv_file_path
 
 

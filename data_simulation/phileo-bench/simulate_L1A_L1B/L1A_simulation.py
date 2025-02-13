@@ -35,9 +35,9 @@ print(os.getcwd())
 # DATA
 # ------------------------
 
-dates_df = pd.read_csv('/home/ccollado/1_simulate_data/data_info/final_dates.csv', index_col=1)
+dates_df = pd.read_csv('/home/ccollado/1_simulate_data/data_info/dates.csv', index_col=1)
 
-final_locs_df = pd.read_csv('/home/ccollado/1_simulate_data/data_info/final_locations.csv', index_col=0)
+final_locs_df = pd.read_csv('/home/ccollado/1_simulate_data/data_info/locations.csv', index_col=0)
 final_locs_df = final_locs_df.where(pd.notna(final_locs_df), other=None)
 sorted_df = final_locs_df.sort_values(by='image_size', ascending=False)
 

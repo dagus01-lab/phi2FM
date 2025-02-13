@@ -2,6 +2,8 @@ from enum import Enum
 
 import geopandas as gpd
 
+from data_simulation import path_to_data
+
 # Warning: Enums and %autoreload can clash, reset Jupyter kernel if you modify this file
 
 # CONSTANTS
@@ -33,8 +35,4 @@ class ProcessingLevels(Enum):
     L1B = "L1B"
     L1C = "L1C"
 
-
-# WORLD_GDF = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
-# The line above is deprecated, use the following line instead
-path_to_data = 'ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp'
 WORLD_GDF = gpd.read_file(path_to_data)

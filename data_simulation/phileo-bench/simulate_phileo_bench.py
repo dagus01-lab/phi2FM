@@ -1,12 +1,6 @@
 # %%
 import os
-import re
 import json
-
-os.chdir('/home/ccollado/1_simulate_data')
-
-cwd = os.getcwd()
-print(cwd)
 
 from osgeo import gdal
 gdal.DontUseExceptions()
@@ -19,36 +13,13 @@ from s2cloudless import S2PixelCloudDetector
 
 from tqdm import tqdm
 
-from phisat_2.utils import tiff2array, plot_array_bands, get_corner_coordinates, get_centroid_coordinates, rgb_bands, src_band, stats_array, get_band_names
-
-os.chdir('/home/ccollado/1_simulate_data/phisat_2')
-print(f'current working directory: {os.getcwd()}')
-
-from phisat_2.workflow import phisat2simulation
+from data_simulation.simulator.workflow import phisat2simulation
 
 # %%
-import datetime
 import os
 
-import matplotlib.pyplot as plt
-import cv2
 import numpy as np
-import geopandas as gpd
-import rasterio
 
-from eolearn.core import (
-    EOTask, 
-    EOPatch,
-    EOWorkflow,
-    FeatureType,
-    MapFeatureTask,
-    RemoveFeatureTask,
-    linearly_connect_tasks,
-    EOExecutor,
-)
-from eolearn.features import SimpleFilterTask
-from eolearn.io import SentinelHubInputTask
-from eolearn.features.utils import spatially_resize_image as resize_images
 from sentinelhub import (
     BBox,
     DataCollection,
@@ -60,37 +31,14 @@ from sentinelhub.exceptions import SHDeprecationWarning
 from tqdm.auto import tqdm
 
 
-from phisat2_constants import (
-    S2_BANDS,
-    S2_RESOLUTION,
-    BBOX_SIZE,
-    PHISAT2_RESOLUTION,
-    ProcessingLevels,
-    WORLD_GDF,
-)
-from phisat2_utils import (
-    AddPANBandTask,
-    AddMetadataTask,
-    CalculateRadianceTask,
-    CalculateReflectanceTask,
-    SCLCloudTask,
-    BandMisalignmentTask,
-    PhisatCalculationTask,
-    AlternativePhisatCalculationTask,
-    CropTask,
-    GriddingTask,
-    ExportGridToTiff,
-    get_extent,
-)
+from data_simulation.simulator.phisat2_constants import ProcessingLevels
 
-from phisat_2.utils import *
+from data_simulation import label_names_path, old_locations_path, new_locations_path, sh_config
+
+# from data_simulation.simulator.utils import None
 
 gdal.DontUseExceptions()
 
-# %%
-sh_config = SHConfig()
-sh_config.sh_client_id = "201426fa-1f43-47f0-8d32-57bb3c78a444"
-sh_config.sh_client_secret = "4XcVSgb6ksLXb1oB78SNQdpflgLYOimF"
 
 # %%
 ProcessingLevels._member_names_
@@ -106,12 +54,12 @@ PROCESSING_LEVEL
 image_example = 'uganda-1_3_0'
 
 # %%
-labels_df = pd.read_csv('data_info/labels_df.csv', index_col=0)
+labels_df = pd.read_csv(label_names_path, index_col=0)
 labels_df = labels_df.where(pd.notnull(labels_df), None)
 
-locations_df = pd.read_csv('data_info/locations_df.csv', index_col=0)
+locations_df = pd.read_csv(old_locations_path, index_col=0)
 
-new_locs_df = pd.read_csv('/home/ccollado/1_simulate_data/data_info/new_locations.csv', index_col=0)
+new_locs_df = pd.read_csv(new_locations_path, index_col=0)
 new_locs_df.columns = new_locs_df.columns.str.strip()
 
 
@@ -155,8 +103,8 @@ final_locs_df['road_label']
 
 # %%
 import json
+from data_simulation import train_test_files_path
 
-train_test_files_path = '/home/ccollado/phileo_NFS/phileo_data/aux_data/train_test_location_all.json'
 with open(train_test_files_path, 'r') as file:
     train_test_files = json.load(file)
 
@@ -214,16 +162,9 @@ lat_topleft, lon_topleft, height_pixels, width_pixels, roads_file, buildings_fil
 
 output_file_name = f"{check_and_modify_image_name(image_example)}.tif"
 
-time_interval = ("2021-06-01", "2021-07-31")
-
-output_path_tifs = '/home/ccollado/phileo_phisat2/tiff_files'
-
-# %% [markdown]
-# # Run Workflow For All Images
-
 # %%
 time_interval = ("2021-01-01", "2021-12-31")
-output_path_tifs = '/home/ccollado/phileo_phisat2/tiff_files'
+from data_simulation import output_path_tifs_phileobench
 
 # %%
 final_locs_df['image_size'] = final_locs_df['height'] * final_locs_df['width']
@@ -234,6 +175,7 @@ sorted_df = final_locs_df.sort_values(by='image_size', ascending=True)
 # sorted_df[(sorted_df['height'] < 128) | (sorted_df['width'] < 128)].sort_index()
 
 # %%
+import random
 shuffled_indices = final_locs_df.index.tolist()
 random.shuffle(shuffled_indices)
 
@@ -245,7 +187,7 @@ for i, image_name in enumerate(tqdm(sorted_df.index)):
 
     output_file_name = f"{check_and_modify_image_name(image_name)}.tif"
 
-    if output_file_name not in os.listdir(output_path_tifs):
+    if output_file_name not in os.listdir(output_path_tifs_phileobench):
 
         lat_topleft, lon_topleft, height_pixels, width_pixels, roads_file, buildings_file = final_locs_df.loc[image_name][['lat_topleft', 'lon_topleft', 
                                                                                                                             'height', 'width', 
@@ -255,8 +197,7 @@ for i, image_name in enumerate(tqdm(sorted_df.index)):
             workflow = phisat2simulation(lat_topleft=lat_topleft, lon_topleft=lon_topleft, width_pixels=width_pixels, height_pixels=height_pixels, 
                                          time_interval=time_interval, output_file_name=output_file_name, roads_file=roads_file, 
                                          buildings_file=buildings_file, maxcc=0.05, threshold_cloudless=0.05, 
-                                         threshold_snow=0.4, output_path_tifs=output_path_tifs, 
-                                         sh_client_id=sh_config.sh_client_id, sh_client_secret=sh_config.sh_client_secret,
+                                         threshold_snow=0.4, output_path_tifs=output_path_tifs_phileobench,
                                          plot_results=False)
             workflow.run()
         
@@ -269,8 +210,7 @@ for i, image_name in enumerate(tqdm(sorted_df.index)):
                 workflow = phisat2simulation(lat_topleft=lat_topleft, lon_topleft=lon_topleft, width_pixels=width_pixels, height_pixels=height_pixels, 
                                              time_interval=time_interval, output_file_name=output_file_name, roads_file=roads_file, 
                                              buildings_file=buildings_file, maxcc=0.1, threshold_cloudless=0.05, 
-                                             threshold_snow=0.4, output_path_tifs=output_path_tifs, 
-                                             sh_client_id=sh_config.sh_client_id, sh_client_secret=sh_config.sh_client_secret,
+                                             threshold_snow=0.4, output_path_tifs=output_path_tifs_phileobench,
                                              plot_results=False)
                 workflow.run()
 

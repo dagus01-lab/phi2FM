@@ -717,13 +717,14 @@ def create_time_intervals(start_date, end_date, num_intervals=2):
 
 class DownloadWOCloudSnow(EOTask):
     def __init__(self, 
+                 csv_file_path,
                  threshold_cloudless=0.05, 
                  threshold_snow=0.4,
                  cloud_detector_config=None,
                  input_task_all_bands=None, 
                  scl_download_task=None,
                  scl_cloud_snow_task=None, 
-                 csv_file_path='/home/ccollado/1_simulate_data/data_info/month_counts.csv'):
+                 ):
         """
         Parameters:
         - threshold_cloudless (float): Maximum average cloud coverage allowed (0 to 1).
@@ -1043,7 +1044,7 @@ def extract_subarray(tiff_path, top_left, bot_right, output_npy=None):
 
 
 class AddClimateZones(EOTask):
-    def __init__(self, layer_name='CLIMATE_ZONES', tiff_climate = "/home/ccollado/2_phileo_fm/pretrain/foundation_uniphi/climate_4326.tif"):
+    def __init__(self, tiff_climate, layer_name='CLIMATE_ZONES'):
         self.layer_name = layer_name
         self.tiff_climate = tiff_climate
 
@@ -1065,3 +1066,85 @@ class AddClimateZones(EOTask):
         
         return eopatch
 
+
+
+
+def calculate_bbox(data, size_x, size_y):
+    meta = data['meta']
+    centre_lat = meta['centre_lat']
+    centre_lon = meta['centre_lon']
+    crs = meta['crs']  # e.g., 'EPSG:32632'
+
+    # Transform center coordinates from lat/lon to the image CRS
+    transformer = Transformer.from_crs('EPSG:4326', crs, always_xy=True)
+    center_x, center_y = transformer.transform(centre_lon, centre_lat)
+
+    # Compute half extents
+    resolution = S2_RESOLUTION  # meters per pixel
+    half_extent_x = (size_x * resolution) / 2
+    half_extent_y = (size_y * resolution) / 2
+
+    # Compute bbox coordinates
+    min_x = center_x - half_extent_x
+    max_x = center_x + half_extent_x
+    min_y = center_y - half_extent_y
+    max_y = center_y + half_extent_y
+    bbox_coordinates = ((min_x, min_y), (max_x, max_y))
+    return BBox(bbox_coordinates, CRS(crs))
+
+class FillEOPatchTask(EOTask):
+    def __init__(self, ds_point):
+        self.ds_point = ds_point
+
+    def execute(self, eop):
+        # Data
+        eop.data['BANDS'] = ( self.ds_point['bands'].numpy().transpose(1, 2, 0)[np.newaxis, ...] - 1000 ) / 10000
+        eop.data['CLOUD_PROB'] = self.ds_point['cloud_mask'].numpy()[np.newaxis, ..., np.newaxis]
+
+        # Meta info
+        eop.meta_info['maxcc'] = 0.1
+        eop.meta_info['size_x'] = eop.data['BANDS'].shape[1]
+        eop.meta_info['size_y'] = eop.data['BANDS'].shape[2]
+        
+        meta_list = []
+        for key, value in self.ds_point['meta'].items():
+            eop.meta_info[key] = str(value)
+            meta_list.append(key)
+        eop.meta_info['meta_list'] = meta_list
+
+        if (eop.meta_info['size_x'] != 1068) or  (eop.meta_info['size_y'] != 1068):
+            raise ValueError("The size of the image is not 1068x1068")
+
+        # Set bbox and timestamp
+        eop.bbox = calculate_bbox(self.ds_point, eop.meta_info['size_x'], eop.meta_info['size_y'])
+        eop.timestamp = [pd.to_datetime(self.ds_point['meta']['timestamp']).to_pydatetime()]
+        
+        # Calculate min_lon and max_lat
+        bbox = eop.bbox
+        crs_proj = bbox.crs
+        crs_geo = CRS.WGS84  # EPSG:4326
+        min_x, max_y = bbox.min_x, bbox.max_y
+
+        transformer = Transformer.from_crs(crs_proj.pyproj_crs(), crs_geo.pyproj_crs(), always_xy=True)
+        min_lon, max_lat = transformer.transform(min_x, max_y)
+
+        eop.meta_info['topleft_min_lon'] = min_lon
+        eop.meta_info['topleft_max_lat'] = max_lat
+        
+        return eop
+
+
+class ResampleZenithAngles(EOTask):
+    def execute(self, eopatch):
+        sun_zenith_angles = eopatch.data['sunZenithAngles']
+        current_shape = sun_zenith_angles.shape[1:3]  # exclude the batch and channel dimensions
+        target_shape = eopatch.data['BANDS'].shape[1:3]  # (1068, 1068)
+
+        if current_shape != target_shape:
+            scale_h = target_shape[0] / current_shape[0]
+            scale_w = target_shape[1] / current_shape[1]
+
+            resampled_data = zoom(sun_zenith_angles, (1, scale_h, scale_w, 1), order=1)  # using bilinear interpolation (order=1)
+            eopatch.data['sunZenithAngles'] = resampled_data
+        
+        return eopatch

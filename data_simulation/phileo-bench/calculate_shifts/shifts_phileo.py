@@ -181,8 +181,8 @@ def find_best_shift(sh_config, image_example):
     # COORDINATES
     # --------------------------------------------
 
-    labels_df_path = '../data_info/labels_df.csv'
-    locations_df_path = '../data_info/locations_df.csv'
+    labels_df_path = '../data_info/labels_names.csv'
+    locations_df_path = '../data_info/old_locations.csv'
 
     labels_df = pd.read_csv(labels_df_path, index_col=0)
     labels_df = labels_df.where(pd.notnull(labels_df), None)
