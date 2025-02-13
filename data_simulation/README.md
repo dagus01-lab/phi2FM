@@ -31,3 +31,5 @@ I dont think it's useful to run this.
 Scripts to convert the TIFF files (of pretraining data and PhilEO-Bench data) from TIFF files of bigger size, to smaller patches in numpy format.
 
 Also, optionally use `batch_size_one_arrays.py` to have one data point per file. This helped me in implementing DDP (buteo memmaped arrays could not be opened in DDP).
+
+Finally, `np_to_lmdb.py` converts the individual `.npy` files to `lmdb`. It is specific to the pretraining data, since for example, it converts the climate segmentation label to a single classification value for the entire image.
