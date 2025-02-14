@@ -491,7 +491,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     """
 
     # -----------------------------------------------------------------------
-    # 1. Handle Distributed Data Parallel (DDP) or DataParallel (DP) setup -- DDP NOT FULLY IMPLEMENTED FOR DOWNSTREAM
+    # 1. Multi GPU Setup (DDP, DP, or False) -- DDP NOT FULLY IMPLEMENTED FOR DOWNSTREAM
     # -----------------------------------------------------------------------
     if data_parallel == 'DDP':
         world_rank, local_rank, world_size = ddp_setup()
@@ -642,12 +642,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         dataset_name, dataset_folder, data_path_inference = '224_10m', data_path_224_10m, data_path_inference_224
     else:
         dataset_name, dataset_folder, data_path_inference = '128_10m', data_path_128_10m, data_path_inference_128
-
-    # As it uses smaller images, requires cropping
-    if model_name == 'phileo_precursor':
-        crop_images = True
-    else:
-        crop_images = False
         
     # Determine if cropping (model requires smaller images), if use by region (prob only relevant to PhilEO-Bench), 
     # and set weights or pos_weight for loss function

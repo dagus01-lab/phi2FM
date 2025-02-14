@@ -37,5 +37,6 @@ path_executable = f"{base_folder}/phi2FM/data_simulation/simulation_aux_files/ph
 # ------------------------------------------------
 df_to_download_path = f"{pretrain_folder}/df_missing.csv"
 df_to_simulate_path = f"{pretrain_folder}/df_missing.csv"
+df_simulated_path = f"{pretrain_folder}/df_simulation.csv"
 climate_tif_path = f"{pretrain_folder}/climate_4326.tif"
 local_directory_majortom = f"{base_folder}/draft"

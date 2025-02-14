@@ -45,14 +45,61 @@ Just auxiliary files required by those explained above.
 
 ## `training_script.py`
 
-Main file that essentially runs everything. Here I do an overview in order of execution so it is a bit easier to understand. Note that 
+Below is a concise, step-by-step overview of the `training_script.py` and what each section does. The `training_script.py` in the pretraining is very similar (a bit simpler).
 
-1. `if __name__ == "__main__":` reads the yaml file, and then runs the main function. You can see that there is an if statement set to `True` which loops over many n_shot, linear probing and full finetuning, and classification of segmentation. I basically used it to be able to run all the experiments without creating a YAML file for each. I guess for other datasets or tasks you should change it. **If want to use the default behavior (run `main` function with args of YAML file, simply set `if False:`).**
+### **High-level flow**
 
-2. The arguments of the main function all come from the YAML file.
+1. **`if __name__ == "__main__":`**  
+   - Reads the YAML file and invokes the `main` function.  
+   - Currently, there's an `if True:` block that loops over different `n_shot` values, runs linear probing or full finetuning, and switches between classification and segmentation tasks. If you prefer to stick to the default (run `main` with YAML arguments), change this to `if False:`.
 
-3. **Multi GPU Setup**: the first part creates the setup if using multi-GPU. Please note that while I implemented the pretraining with DDP, I did not do it for the downstream tasks. You can use DP tho. And implmenting DDP should just require to change `training_loops.py` as the `training_script.py` is already fine for DDP. You can check the `training_loops.py` in the pretraining as it is just a few changes that must be done (setting the data sampler arguments at each epoch, and not calling the model again to generate the images to plot). Also need to ensure that the data is in a correct format for DDP, and change the dataloaders to use data sampler.
+2. **YAML arguments**  
+   - All arguments for `main` come directly from the YAML file.  
 
-4. Next, some assertions are done to ensure the number of channels is correct (you should change this assertion if adding new downstream tasks), and another assertion to ensure not using both n_shot and split_ratio
+
+
+
+
+
+### **Inside `main`**
+
+1. **Multi-GPU Setup**  
+   - Sets up distributed or data parallel training (DDP or DP).  
+   - *Note*: DDP was fully implemented for pretraining but not for downstream tasks (i.e. this file). 
+     - You can check the `training_loops.py` in the pretraining as it is just a few changes that must be done (setting the data sampler arguments at each epoch, and not calling the model again to generate the images to plot). 
+     - Also need to ensure that the data is in a correct format for DDP, and change the dataloaders to use data sampler.
+
+2. **Define the model**  
+   - Loads the chosen model (pretrained or randomly initialized).  
+   - Works for Prithvi 1, SatMAE, phisatnet, and the three pretrained PhilEO-Bench models (two U-Nets and one ViT).  
+   - Afterwards, it wraps the model in DP or DDP if needed, and prints a summary.
+   - If want to modify these, look at the function `get_models_pretrained`. `get_models` could also be used but I don't think is interesting since the weights are random (it is more for pretraining).
+
+
+
+3. **Construct Output Folder**  
+   - Uses the base output path, current date, experiment name, and data partition protocol (e.g., `n_shot` or `split_ratio`).
+
+
+4. **Load Datasets**  
+   - Asserts the number of channels needed for the task and that `n_shot` and `split_ratio` aren’t both used at once.  
+   - Chooses the data folder (e.g., 128 vs. 224 resolution) to read data from.  
+   - Gets datasets as memmaped buteo arrays, prints their shapes, and sets up the corresponding data loaders.
+   - If `n_shot` is 0, it switches from training to inference mode (since there’s effectively no training set). It needs to have at least n_shot = 1 for script to work but it won't be used. Also, `.inference` function is used and not `.test` because the latter requires to use `.train` first.
+   - If want to debug or use another code, there's an option to return already here the main function with the dataloaders (useful for debugging).
+   - `by_region` is by default True. If wanting to use `False` (probably the case for other downstream tasks), should create a .csv with the file names.
+
+5. **Initialize the Trainer**  
+   - Configures learning rate (only exponential warmup currently implemented, linear warmup with `min_lr` was used during pretraining but I used the lr of PhilEO-Bench in downstream).  
+   - Initializes the trainer from `training_loops.py`.
+
+6. **Training / Testing / Inference Workflow**  
+   - Depending on `train_mode`, calls the appropriate trainer functions (`train`, `test`, `inference`) in sequence.
+
+6. **6. Training / testing / inference workflow**: essentially calls the training, testing, and/or inference functions of the trainer as desired.
+
+7. **Finish Script**  
+   - Saves all parameters to a YAML in the output folder.  
+   - If using DDP, runs cleanup routines.
 
 

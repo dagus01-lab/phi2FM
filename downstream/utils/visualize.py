@@ -12,7 +12,6 @@ import numpy as np
 import buteo as beo
 from matplotlib import gridspec
 
-from utils.data_protocol import protocol_fewshot
 from utils import config_lc
 from utils import config_kg
 
