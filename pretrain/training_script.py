@@ -292,11 +292,12 @@ def main(
         print(f'Training on: {model_name}')
         print('--'*30)
 
+    # Optionally return datasets instead of running training
     if only_get_datasets:
         return dl_train, dl_val, dl_test, dl_inference
 
     # -----------------------------------------------------------------------
-    # 6. Initialize the trainer
+    # 5. Initialize the trainer
     # -----------------------------------------------------------------------
     
     # Adjust LR for warmup
@@ -335,7 +336,7 @@ def main(
 
 
     # -----------------------------------------------------------------------
-    # 7. Training / testing / inference workflow
+    # 6. Training / testing / inference workflow
     # -----------------------------------------------------------------------
 
     # import pdb; pdb.set_trace()
@@ -383,7 +384,7 @@ def main(
 
 
     # -----------------------------------------------------------------------
-    # 8. Finish script. Save parameters to YAML and cleanup if DDP
+    # 7. Finish script. Save parameters to YAML and cleanup if DDP
     # -----------------------------------------------------------------------
 
     # Save parameters to YAML

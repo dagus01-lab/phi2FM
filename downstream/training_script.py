@@ -8,6 +8,7 @@ from torchinfo import summary
 
 import numpy as np
 import random
+import inspect
 
 import torch.nn as nn
 from datetime import date
@@ -79,7 +80,7 @@ DOWNSTREAM_LIST = ['lc', 'building', 'roads', 'lc_classification', 'building_cla
 
 def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_scheduler, warmup, early_stop, dl_train,
                 dl_val, dl_test, dl_inference, NAME, OUTPUT_FOLDER, vis_val, warmup_steps, warmup_gamma, pos_weight, 
-                weights, save_info_vars, fixed_task=None, rank=None, min_lr=None):
+                weights, save_info_vars, rank=None, min_lr=None):
     
     if model_name in (CNN_LIST + MIXER_LIST + VIT_CNN_LIST + CNN_PRETRAINED_LIST + VIT_CNN_PRETRAINED_LIST):
         if downstream_task == 'roads' or downstream_task == 'building':
@@ -158,13 +159,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
     return trainer
 
 
-def get_models(model_name, input_channels, output_channels, input_size, fixed_task=None):
-    # if model_name.startswith('FoundationModel4Task_'):
-    #     model_size = model_name.split('_')[-1]
-    #     return get_phisat2_model(model_size=model_size, return_model='pretrain', input_dim=input_channels, output_dim=input_channels, img_size=input_size, fixed_task=fixed_task)
-    # if model_name.startswith('OVCompatible_FoundationModel4Task_'):
-    #     model_size = model_name.split('_')[-1]
-    #     return get_phisat2_model(model_size=model_size, return_model='pretrain_compatible', input_dim=input_channels, output_dim=input_channels, img_size=input_size, fixed_task=fixed_task)
+def get_models(model_name, input_channels, output_channels, input_size):
     if model_name == 'baseline_cnn':
         return BaselineNet(input_dim=input_channels, output_dim=output_channels)
     elif model_name == 'core_unet_nano':
@@ -427,7 +422,6 @@ def get_args():
     parser.add_argument	('--data_path_inference_224', type=str, default='/home/ccollado/2_phileo_fm/inference_folder_224/')
     parser.add_argument('--additional_inference', type=str, default='no', help='run inference only')
     parser.add_argument('--inference_model_path', type=str, default='/home/phimultigpu/phileo_NFS/...')
-    parser.add_argument('--inference_also_on_trainval', type=bool, default=False)
     parser.add_argument('--C', type=str, default='/home/phimultigpu/phileo_NFS/phileo_data/experiments')
     parser.add_argument('--data_parallel', type=str, default=None)
     parser.add_argument('--device_ids', type=list, default=[0, 1, 2, 3])
@@ -446,7 +440,7 @@ def get_args():
 def main(experiment_name, downstream_task, model_name, augmentations, batch_size, model_device, generator_device, num_workers, early_stop, 
         epochs, input_channels, output_channels, input_size, lr, lr_scheduler, n_shot, split_ratio, regions, vis_val, warmup, warmp_steps, 
         warmup_gamma, pretrained_model_path, freeze_pretrained, data_path_128_10m, data_path_224_10m, data_path_224_30m, data_path_inference_128, 
-        data_path_inference_224, additional_inference, inference_model_path, inference_also_on_trainval, output_path, data_parallel, 
+        data_path_inference_224, train_mode, output_path, data_parallel, 
         device_ids, only_get_datasets, pad_to_10_bands, min_lr):
     """ 
     main script for PhilEO Bench. Used to run model training experiments with randomly initialized and pre-trained models on a number of downstream tasks. 
@@ -486,9 +480,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         data_path_224_30m (str, optional): Define data path for 224x224 30m resolution dataset. Defaults to None.
         data_path_inference_128 (str, optional): Define data path for inference data of size 128. Defaults to None.
         data_path_inference_224 (str, optional): Define data path for inference data of size 224. Defaults to None.
-        additional_inference (str, optional): Define if only inference should be run. Options: ['yes', 'no', 'only']. Defaults to None.
+        train_mode (str, optional): Define if only inference should be run. Options: ['yes', 'no', 'only']. Defaults to None.
         inference_model_path (str, optional): Define model path for inference. Defaults to None.
-        inference_also_on_trainval (bool, optional): If set to True inference will also be run on training and validation data. Defaults to False.
         output_path (str, optional): Define folder to save artifacts in. Defaults to None.
         data_parallel (str, optional): If set to True Model training will be parallized on multiple gpus. Defaults to None.
         device_ids (list, optional): Define GPU IDs to use for parallization. Defaults to None.
@@ -497,65 +490,33 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         min_lr (float, optional): Define minimum learning rate for cosine annealing scheduler and warmup. Defaults to 1e-6.
     """
 
+    # -----------------------------------------------------------------------
+    # 1. Handle Distributed Data Parallel (DDP) or DataParallel (DP) setup -- DDP NOT FULLY IMPLEMENTED FOR DOWNSTREAM
+    # -----------------------------------------------------------------------
     if data_parallel == 'DDP':
         world_rank, local_rank, world_size = ddp_setup()
-        # ddp_setup(rank, world_size)
-                
-        # Adjust device for this process
         device = torch.device(f'cuda:{device_ids[local_rank]}' if torch.cuda.is_available() else 'cpu')
         torch.cuda.set_device(device)
-        # torch.set_default_device(rank)
-        model_device = device
-        generator_device = 'cpu'
-        print(f'world_rank: {world_rank}, world_size: {world_size}, device: {device}, model_device: {model_device}, generator_device: {generator_device}')
-        
-        if world_rank == 0:
-            print(f'Using DDP, spawning {world_size} processes')
-
+        model_device, generator_device = device, 'cpu'
+        print(f'Using DDP: rank {world_rank}/{world_size}, device {device}')
     else:
-        # device= torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        world_rank, local_rank, world_size = 0, 0, 1
         if model_device == 'cuda':
-            model_device = f'cuda:{device_ids[0]}'
+            model_device = f'cuda:{device_ids[0]}' if device_ids else 'cuda'
         torch.set_default_device(model_device)
-        print('DEVICE', model_device)
-        world_rank = 0
-        world_size = 1
         generator_device = model_device
+        print(f'Device (not using DDP): {model_device}')
 
-    init_lr = lr
-    
-    fixed_task = None # None, reconstruction, coords, climate
-    
-    if world_rank == 0:
-        print(f"Fixed task: {fixed_task}")
+    if torch.cuda.device_count() > 1 and world_rank == 0:
+        num_gpus = torch.cuda.device_count() if device_ids is None else len(device_ids)
+        print(f"Let's use {num_gpus} GPUs!")
 
-        assert not (n_shot == None) or not (split_ratio == None), 'Please define data partition protocol!'
-        assert isinstance(n_shot, int) ^ isinstance(split_ratio, float), f'n_shot cannot be used with split_ratio! -- n_shot: {n_shot}, split_ratio: {split_ratio}'
 
-        if n_shot is not None:
-            print('--------------------------------')
-            print(f"n_shot: {n_shot}")
-            print('--------------------------------')
-        elif split_ratio is not None:
-            print('--------------------------------')   
-            print(f"split_ratio: {split_ratio}")
-            print('--------------------------------')
-    
-    if (downstream_task == 'lc') or (downstream_task == 'lc_classification'):
-        assert (output_channels == 11), 'land cover tasks should have 11 output channels'
+    # -----------------------------------------------------------------------
+    # 2. DEFINE THE MODEL
+    # -----------------------------------------------------------------------
 
-    if (downstream_task == 'roads') or (downstream_task == 'building'):
-        assert output_channels == 1, 'road and building density estimation tasks should have a single output channel'
-
-    if downstream_task == 'building_classification':
-        assert output_channels == 5, 'building classification tasks should have a 5 output channels'
-
-    if downstream_task == 'roads_classification':
-        assert output_channels == 2, 'road classification tasks should have a 5 output channels'
-    
-    if downstream_task == 'coords':
-        assert output_channels == 3, 'geolocation tasks should have 3 output channels'
-
+    # LOAD PRETRAINED MODEL
     if pretrained_model_path is not None:
         if world_rank == 0:
             print('model_name: ', model_name)
@@ -571,73 +532,136 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         if world_rank == 0:
             print(f'Loaded pretrained model: {model_name} with {NAME} weights')
 
+    # LOAD RANDOMLY INITIALIZED MODEL
     else:
         if freeze_pretrained:
             if world_rank == 0:
                 print(f"Ignoring freeze_pretrained set to {freeze_pretrained} as no pretrained model was supplied")
-        model = get_models(model_name, input_channels, output_channels, input_size, fixed_task)
+        model = get_models(model_name, input_channels, output_channels, input_size)
         NAME = model.__class__.__name__
 
-    perform_inference = additional_inference == 'train_test_inference' or additional_inference == 'inference' or additional_inference == 'train_inference'
-    if inference_model_path is not None and perform_inference:
-        state_dict = torch.load(inference_model_path)
-        if world_rank == 0:
-            print(f'Loading inference model from {inference_model_path}')
 
-        if data_parallel == 'DDP' or data_parallel == 'DP':
-            from collections import OrderedDict
-            new_state_dict = OrderedDict()
-            
-            for key, value in state_dict.items():
-                # Remove 'module.' prefix if it exists
-                new_key = key.replace("module.", "")
-                new_state_dict[new_key] = value
 
-            # Load the modified state dictionary into the model
-            model.load_state_dict(new_state_dict)
+    # Parallelize model (DP or DDP) and print model summary
+    if data_parallel == 'DP':
+        model = nn.DataParallel(model, device_ids=device_ids).to(model_device)
+    elif data_parallel == 'DDP':
+        model = nn.SyncBatchNorm.convert_sync_batchnorm(model).to(model_device)
+        model = DDP(model, device_ids=[model_device], output_device=model_device)
 
-        else:
-            model.load_state_dict(state_dict, strict=True)
 
-    OUTPUT_FOLDER = f'{output_path}/{experiment_name}/{downstream_task}/{date.today().strftime("%d%m%Y")}_{NAME}_{downstream_task}'
-    print(f'Output folder: {OUTPUT_FOLDER}')
 
-    # if lr_scheduler is not None:
-    #     OUTPUT_FOLDER = f'{output_path}/{experiment_name}/{downstream_task}/{date.today().strftime("%d%m%Y")}_{NAME}_{downstream_task}_{lr_scheduler}'
+    # Print model summary and module sizes
+    if world_rank == 0:
+        input_sizes = {
+            'SatMAE': (batch_size, input_channels, 96, 96),
+            'SatMAE_classifier': (batch_size, input_channels, 96, 96),
+            'prithvi': (batch_size, 6, 224, 224),
+            'prithvi_classifier': (batch_size, 6, 224, 224),
+            'seasonal_contrast': (batch_size, input_channels, 224, 224),
+            'resnet_imagenet': (batch_size, input_channels, 224, 224),
+            'resnet': (batch_size, input_channels, 224, 224),
+            'seasonal_contrast_classifier': (batch_size, input_channels, 224, 224)
+        }
 
-    assert (min_lr is None) != (warmup_gamma is None), 'min_lr and warmup_gamma cannot be used together'
-    if warmup and warmup_gamma is not None:
-        lr = lr / int(( 10 )**(warmp_steps))  # for warmup start
+        input_size = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
+        model_summary = summary(model, input_size=input_size, dtypes=[torch.float32])
 
-    dataset_folder = data_path_128_10m
-    dataset_name = '128_10m'
-    data_path_inference = data_path_inference_128
+        if model_device == 'cpu':
+            model.to(model_device)
+            print('Model moved back to CPU after summary') # sometimes summary moves model to GPU if available
+
+        valid_modules = ["module", "model", "encoder", "decoder", "module.encoder", "module.decoder"]
+
+        # Filter out invalid ones
+        existing_modules = [
+            name for name in valid_modules 
+            if hasattr(model, name) or (lambda n: hasattr(model, "get_submodule") and hasattr(model, n) and model.get_submodule(n))(name)
+        ]
+        
+        # Print memory usage only for valid modules
+        print(module_memory_usage(model))
+        print('-------------------')
+        for module_name in existing_modules:
+            print(module_memory_usage(model, module_name))
+            print('-------------------')
+
+    else:
+        model_summary = None
+
+
+
+
+    # -----------------------------------------------------------------------
+    # 3. Construct output folder
+    # -----------------------------------------------------------------------
+    current_date = date.today().strftime('%Y%m%d')
+    split_string = str(split_ratio) if split_ratio is not None else str(n_shot)
+    OUTPUT_FOLDER = os.path.join(
+        output_path,
+        experiment_name,
+        f"{current_date}_{NAME}_{split_string}"
+    )
+
+    if world_rank == 0:
+        print(f"Output folder: {OUTPUT_FOLDER}")
+
+
+    # -----------------------------------------------------------------------
+    # 4. Load datasets
+    # -----------------------------------------------------------------------
+
+    # Validate configuration
+    task_output_channels = {
+        'lc': 11,
+        'lc_classification': 11,
+        'roads': 1,
+        'building': 1,
+        'building_classification': 5,
+        'roads_classification': 2,
+        'coords': 3
+    }
+    assert output_channels == task_output_channels[downstream_task], (
+        f"{downstream_task} tasks should have {task_output_channels[downstream_task]} output channels"
+    )
+    assert n_shot is not None or split_ratio is not None, "Please define data partition protocol!"
+    assert isinstance(n_shot, int) ^ isinstance(split_ratio, float), "n_shot cannot be used with split_ratio!"
+
+    # Display partition info
+    if world_rank == 0:
+        print('--------------------------------')
+        partition_type = 'n_shot' if n_shot is not None else 'split_ratio'
+        partition_value = n_shot if n_shot is not None else split_ratio
+        print(f"{partition_type}: {partition_value}")
+        print('--------------------------------')
+
+    # Choose dataset path based on model
     if model_name in MODELS_224_r30:
-        dataset_folder = data_path_224_30m
-        data_path_inference = data_path_inference_224
-        dataset_name = '224_30m'
-    if model_name in MODELS_224:
-        dataset_folder = data_path_224_10m
-        data_path_inference = data_path_inference_224
-        dataset_name = '224_10m'
+        dataset_name, dataset_folder, data_path_inference = '224_30m', data_path_224_30m, data_path_inference_224
+    elif model_name in MODELS_224:
+        dataset_name, dataset_folder, data_path_inference = '224_10m', data_path_224_10m, data_path_inference_224
+    else:
+        dataset_name, dataset_folder, data_path_inference = '128_10m', data_path_128_10m, data_path_inference_128
 
+    # As it uses smaller images, requires cropping
     if model_name == 'phileo_precursor':
         crop_images = True
     else:
         crop_images = False
         
+    # Determine if cropping (model requires smaller images), if use by region (prob only relevant to PhilEO-Bench), 
+    # and set weights or pos_weight for loss function
+    crop_images = True if model_name == 'phileo_precursor' else False
     by_region = False if downstream_task == 'coords' else True
-    pos_weight = None
-    weights = None
+    pos_weight, weights = None, None
 
 
+    # Data partition
     if isinstance(n_shot, int):
-        OUTPUT_FOLDER = f'{OUTPUT_FOLDER}_{n_shot}'
-        
         if n_shot == 0:
             n_shot = 1
-            additional_inference = 'inference'
-
+            train_mode = 'inference'
+        
         x_train, y_train, x_val, y_val, pos_weight, weights = data_protocol.protocol_fewshot_memmapped(
             folder=dataset_folder,
             dst=None,
@@ -647,205 +671,187 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             data_selection='create',
             name=dataset_name,
             crop_images=crop_images
-            )
+        )
 
     elif isinstance(split_ratio, float):
-        OUTPUT_FOLDER = f'{OUTPUT_FOLDER}_{split_ratio}'
         x_train, y_train, x_val, y_val = data_protocol.protocol_split(
             dataset_folder,
             split_percentage=split_ratio,
             regions=regions,
             y=downstream_task,
             by_region=by_region
-            )
+        )
 
-    x_test, y_test = data_protocol.get_testset(folder=dataset_folder,
-                                            y=downstream_task,
-                                            crop_images=crop_images,
-                                            by_region=by_region,
-                                            )
+    # Prepare testset and inference set
+    x_test, y_test = data_protocol.get_testset(
+        folder=dataset_folder,
+        y=downstream_task,
+        crop_images=crop_images,
+        by_region=by_region,
+    )
+    x_inference, y_inference = data_protocol.get_testset(
+        folder=data_path_inference,
+        y=downstream_task,
+        crop_images=crop_images,
+        by_region=by_region
+    )
 
-    if inference_also_on_trainval:
-        x_inference, y_inference = data_protocol.get_inferenceset(folder=data_path_inference,
-                                                                y=downstream_task,
-                                                                crop_images=crop_images
-                                                                )
-    else:
-        x_inference, y_inference = data_protocol.get_testset(folder=data_path_inference,
-                                                                y=downstream_task,
-                                                                crop_images=crop_images,
-                                                                by_region=by_region
-                                                                )
-
-
-    # Check and print the shape of the first element in each dataset, if available
+    # Log shapes of first elements in each dataset
     if world_rank == 0:
-        print("Dataset protocol: ", dataset_name)
-
-        # if len(x_test) == len(x_inference) and all(np.array_equal(a, b) for a, b in zip(x_test, x_inference)):
-        #     print("Inference data is the same as test data.")
-        # else:
-        #     print("Inference data is different from test data.")
-
+        print("Dataset protocol:", dataset_name)
         if len(x_train.array_list) > 0:
             print("Training set datapoint shape: X -", x_train.array_list[0].shape)
         else:
             print("Training dataset is empty.")
-
         if len(x_val.array_list) > 0:
             print("Validation set datapoint shape: X -", x_val.array_list[0].shape)
         else:
             print("Validation dataset is empty.")
-
         if len(x_test.array_list) > 0:
             print("Test set datapoint shape: X -", x_test.array_list[0].shape)
         else:
             print("Test dataset is empty.")
-
         if len(x_inference.array_list) > 0:
             print("Inference set datapoint shape: X -", x_inference.array_list[0].shape)
         else:
             print("Inference dataset is empty.")
+
+    # Create dataloaders
+    dl_train, dl_test, dl_val, dl_inference = load_data.load_data(
+        x_train, y_train,
+        x_val, y_val,
+        x_test, y_test,
+        x_inference, y_inference,
+        with_augmentations=augmentations,
+        num_workers=num_workers,
+        batch_size=batch_size,
+        downstream_task=downstream_task,
+        model_name=model_name.split('_')[0],
+        device=generator_device,
+        pad_to_10_bands=pad_to_10_bands,
+    )
     
-    dl_train, dl_test, dl_val, dl_inference = load_data.load_data(x_train, y_train, x_val, y_val, x_test, y_test, x_inference, y_inference,
-                                                    with_augmentations=augmentations,
-                                                    num_workers=num_workers,
-                                                    batch_size=batch_size,
-                                                    downstream_task=downstream_task,
-                                                    model_name=model_name.split('_')[0],
-                                                    device=generator_device,
-                                                    pad_to_10_bands=pad_to_10_bands,
-                                                    )
+    # Log dataloader sizes and training model
     if world_rank == 0:
         print(f"Length of training dataloader: {len(dl_train)}")
         print(f"Length of validation dataloader: {len(dl_val)}")
         print(f"Length of test dataloader: {len(dl_test)}")
         print(f"Length of inference dataloader: {len(dl_inference)}")
+        print(f"Training on: {model_name}")
+        print('--' * 10)
 
-        print(f'Training on: {model_name}')
-        print('--'*10)
-    
-
-    if data_parallel == 'DP':
-            # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-            model = nn.DataParallel(model, device_ids=device_ids)
-            model.to(model_device)
-            # model.to(f'cuda:{device_ids[0]}')
-            
-    elif data_parallel == 'DDP':
-        model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        model.to(model_device)
-        model = DDP(model, device_ids=[model_device], output_device=model_device)
-
-
-    if torch.cuda.device_count() > 1 and world_rank == 0:
-        print("Let's use", torch.cuda.device_count() if device_ids is None else len(device_ids), "GPUs!")
-
-
-    if world_rank == 0:
-        if model_name == 'SatMAE' or model_name =='SatMAE_classifier':
-
-            model_summary = summary(model,
-                                    input_size=(batch_size, input_channels, 96, 96), )
-
-        elif model_name == 'prithvi' or model_name =='prithvi_classifier':
-            model_summary = summary(model,
-                                    input_size=(batch_size, 6, 224, 224), dtypes=[torch.float32])
-
-        elif model_name in ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier']:
-            model_summary = summary(model,
-                                    input_size=(batch_size, input_channels, 224, 224), )
-
-        else:
-            model_summary = summary(model, input_size=(batch_size, input_channels, input_size, input_size))
-
-        if model_device == 'cpu':
-            model.to(model_device);
-            print('Model moved to CPU after summary')
-        
-    else:
-        model_summary = None
-    
-    save_info_vars = (model_summary, n_shot, split_ratio, warmup, init_lr)
-
-    trainer = get_trainer(model_name, downstream_task, epochs, lr, model, model_device, lr_scheduler, warmup, early_stop, 
-                          dl_train, dl_val, dl_test, dl_inference, NAME, OUTPUT_FOLDER, vis_val, warmp_steps, warmup_gamma, 
-                          pos_weight, weights, save_info_vars, fixed_task, world_rank, min_lr)
-
+    # Optionally return datasets instead of running training
     if only_get_datasets:
-        return dl_train, dl_val, dl_test, dl_inference, trainer
-
-    if world_rank == 0:
-        print(module_memory_usage(model))
-        print('-------------------')
-        print(module_memory_usage(model, 'module'))
-        print('-------------------')
-        print(module_memory_usage(model, 'coreunet'))
-        print('-------------------')
-        print(module_memory_usage(model, 'model'))
-        print('-------------------')
-        print(module_memory_usage(model, 'encoder'))
-        print('-------------------')
-        print(module_memory_usage(model, 'decoder'))
-        print('-------------------')
-        print(module_memory_usage(model, 'module.encoder'))
-        print('-------------------')
-        print(module_memory_usage(model, 'module.decoder'))
-        print('-------------------')
-
-    # all_x, all_y = dataloader_to_arrays(dl_train, device=trainer.device)
-    # all_x, all_y = dataloader_to_tensors(dl_train, device=trainer.device)
-    
-    # x, y = next(iter(dl_train))
-    # trainer.loop_data()
+        return dl_train, dl_val, dl_test, dl_inference
 
 
+    # -----------------------------------------------------------------------
+    # 5. Initialize the trainer
+    # -----------------------------------------------------------------------
+
+    # Get learning rate
+    init_lr = lr
+    assert (min_lr is None) != (warmup_gamma is None), 'min_lr and warmup_gamma cannot be used together'
+    if warmup and warmup_gamma is not None:
+        lr = lr / int(( 10 )**(warmp_steps))  # for warmup start
+
+
+    trainer = get_trainer(
+        model_name=model_name,
+        downstream_task=downstream_task,
+        epochs=epochs,
+        lr=lr,
+        model=model,
+        device=model_device,
+        lr_scheduler=lr_scheduler,
+        warmup=warmup,
+        early_stop=early_stop,
+        dl_train=dl_train,
+        dl_val=dl_val,
+        dl_test=dl_test,
+        dl_inference=dl_inference,
+        NAME=NAME,
+        OUTPUT_FOLDER=OUTPUT_FOLDER,
+        vis_val=vis_val,
+        warmup_steps=warmp_steps,
+        warmup_gamma=warmup_gamma,
+        pos_weight=pos_weight,
+        weights=weights,
+        save_info_vars=(model_summary, n_shot, split_ratio, warmup, init_lr),
+        rank=world_rank,
+        min_lr=min_lr
+    )
+
+
+    # -----------------------------------------------------------------------
+    # 6. Training / testing / inference workflow
+    # -----------------------------------------------------------------------
 
     # import pdb; pdb.set_trace()
     
-    if additional_inference == 'train_test_inference':
+    if train_mode == 'train_test_inference':
         trainer.train()
         trainer.test()
-        trainer.save_info(model_summary=model_summary, n_shot=n_shot, p_split=split_ratio, warmup=warmup,
-                        lr=init_lr)
+        trainer.save_info(
+            model_summary=model_summary,
+            n_shot=n_shot,
+            p_split=split_ratio,
+            warmup=warmup,
+            lr=init_lr
+        )
         trainer.inference()
 
-    elif additional_inference == 'train_test':
+    elif train_mode == 'train_test':
         trainer.train()
         trainer.test()
         print('Saving model summary')
-        trainer.save_info(model_summary=model_summary, n_shot=n_shot, p_split=split_ratio, warmup=warmup,
-                        lr=init_lr)
+        trainer.save_info(
+            model_summary=model_summary,
+            n_shot=n_shot,
+            p_split=split_ratio,
+            warmup=warmup,
+            lr=init_lr
+        )
 
-    elif additional_inference == 'test':
+    elif train_mode == 'test':
         trainer.test()
 
-    elif additional_inference == 'inference':
+    elif train_mode == 'inference':
         trainer.inference()
-        
-    elif additional_inference == 'train_inference':
+
+    elif train_mode == 'train_inference':
         trainer.train()
         trainer.inference()
 
     else:
-        raise ValueError(f'additional_inference should be one of [train_test_inference, train_test, inference, train_inference], got {additional_inference}')
+        raise ValueError(
+            "train_mode should be one of [train_test_inference, train_test, inference, train_inference], "
+            f"got {train_mode}"
+        )
 
-    # SAVE PARAMETERS TO OUTPUT FOLDER AS YAML
-    import inspect
+    # -----------------------------------------------------------------------
+    # 7. Finish script. Save parameters to YAML and cleanup if DDP
+    # -----------------------------------------------------------------------
+
+    # Save parameters to YAML
     sig = inspect.signature(main)
     input_params = {key: value for key, value in locals().items() if key in sig.parameters}
-    
-    yaml_file = f'{experiment_name}_{downstream_task}_{date.today().strftime("%d%m%Y")}_{NAME}_{downstream_task}_{lr_scheduler}.yaml'
+
+    yaml_file = f'{experiment_name}_{date.today().strftime("%d%m%Y")}_{NAME}.yaml'
     yaml_file = yaml_file.replace('/', '_')
     params_path = os.path.join(OUTPUT_FOLDER, yaml_file)
 
     with open(params_path, 'w') as file:
         yaml.dump(input_params, file)
 
+    # Cleanup DDP
     if data_parallel == 'DDP':
         ddp_cleanup()
 
-    print(f"See results of experiment in {OUTPUT_FOLDER}")
+    if world_rank == 0:
+        print(f"See results of experiment in {OUTPUT_FOLDER}")
+
+
 
 
 if __name__ == "__main__":
@@ -855,6 +861,7 @@ if __name__ == "__main__":
     pid = os.getpid()
     print(f"Script started with PID: {pid}")
 
+    # 1. Reading YAML file
     parser, parser_yaml = get_args()
     args_yaml, remainder = parser_yaml.parse_known_args()
     
@@ -864,8 +871,9 @@ if __name__ == "__main__":
     else:
         args = parser.parse_args()
 
+    # 2. Run main function
     if True:
-        for n_shot in [0]:
+        for n_shot in [0, 50, 100, 500, 1000, 5000]:
             args.n_shot = n_shot
             for freeze_pretrained in [True, False]:
                 args.freeze_pretrained = freeze_pretrained
@@ -877,6 +885,10 @@ if __name__ == "__main__":
                 
                     print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")
                     main(**vars(args))
+                    
+                    # Remove classification if added
+                    args.downstream_task = args.downstream_task.replace('_classification', '')
+                    args.model_name = args.model_name.replace('_classifier', '')
 
     else:
         main(**vars(args))
