@@ -65,12 +65,13 @@ Below is a concise, step-by-step overview of the `training_script.py` and what e
 
 1. **Multi-GPU Setup**  
    - Sets up distributed or data parallel training (DDP or DP).  
-   - *Note*: DDP was fully implemented for pretraining but not for downstream tasks (i.e. this file). 
-     - You can check the `training_loops.py` in the pretraining as it is just a few changes that must be done (setting the data sampler arguments at each epoch, and not calling the model again to generate the images to plot). 
+   - *Note*: DDP was fully implemented for pretraining but not for downstream tasks (i.e. this file).
+     - You can check the `training_loops.py` in the pretraining as it is just a few changes that must be done (setting the data sampler arguments at each epoch, and not calling the model again to generate the images to plot).
      - Also need to ensure that the data is in a correct format for DDP, and change the dataloaders to use data sampler.
 
 2. **Define the model**  
-   - Loads the chosen model (pretrained or randomly initialized).  
+   - Loads the chosen model (pretrained or randomly initialized).
+   - There is an option (`downstream_model_path`) to load entire downstream model weights instead of just feature extractor. Useful for debugging.
    - Works for Prithvi 1, SatMAE, phisatnet, and the three pretrained PhilEO-Bench models (two U-Nets and one ViT).  
    - Afterwards, it wraps the model in DP or DDP if needed, and prints a summary.
    - If want to modify these, look at the function `get_models_pretrained`. `get_models` could also be used but I don't think is interesting since the weights are random (it is more for pretraining).

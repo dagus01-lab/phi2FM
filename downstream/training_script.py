@@ -9,6 +9,8 @@ from torchinfo import summary
 import numpy as np
 import random
 import inspect
+from collections import OrderedDict
+
 
 import torch.nn as nn
 from datetime import date
@@ -421,7 +423,7 @@ def get_args():
     parser.add_argument('--data_path_inference_128', type=str, default='/home/ccollado/2_phileo_fm/inference_folder/')
     parser.add_argument	('--data_path_inference_224', type=str, default='/home/ccollado/2_phileo_fm/inference_folder_224/')
     parser.add_argument('--additional_inference', type=str, default='no', help='run inference only')
-    parser.add_argument('--inference_model_path', type=str, default='/home/phimultigpu/phileo_NFS/...')
+    parser.add_argument('--downstream_model_path', type=str, default=None)
     parser.add_argument('--C', type=str, default='/home/phimultigpu/phileo_NFS/phileo_data/experiments')
     parser.add_argument('--data_parallel', type=str, default=None)
     parser.add_argument('--device_ids', type=list, default=[0, 1, 2, 3])
@@ -440,7 +442,7 @@ def get_args():
 def main(experiment_name, downstream_task, model_name, augmentations, batch_size, model_device, generator_device, num_workers, early_stop, 
         epochs, input_channels, output_channels, input_size, lr, lr_scheduler, n_shot, split_ratio, regions, vis_val, warmup, warmp_steps, 
         warmup_gamma, pretrained_model_path, freeze_pretrained, data_path_128_10m, data_path_224_10m, data_path_224_30m, data_path_inference_128, 
-        data_path_inference_224, train_mode, output_path, data_parallel, 
+        data_path_inference_224, train_mode, downstream_model_path, output_path, data_parallel, 
         device_ids, only_get_datasets, pad_to_10_bands, min_lr):
     """ 
     main script for PhilEO Bench. Used to run model training experiments with randomly initialized and pre-trained models on a number of downstream tasks. 
@@ -481,7 +483,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         data_path_inference_128 (str, optional): Define data path for inference data of size 128. Defaults to None.
         data_path_inference_224 (str, optional): Define data path for inference data of size 224. Defaults to None.
         train_mode (str, optional): Define if only inference should be run. Options: ['yes', 'no', 'only']. Defaults to None.
-        inference_model_path (str, optional): Define model path for inference. Defaults to None.
+        downstream_model_path (str, optional): Define model path for inference. Defaults to None.
         output_path (str, optional): Define folder to save artifacts in. Defaults to None.
         data_parallel (str, optional): If set to True Model training will be parallized on multiple gpus. Defaults to None.
         device_ids (list, optional): Define GPU IDs to use for parallization. Defaults to None.
@@ -515,7 +517,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # -----------------------------------------------------------------------
     # 2. DEFINE THE MODEL
     # -----------------------------------------------------------------------
-
+    
     # LOAD PRETRAINED MODEL
     if pretrained_model_path is not None:
         if world_rank == 0:
@@ -541,6 +543,27 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         NAME = model.__class__.__name__
 
 
+    # If want to load weights of full downstream model, not just a feature extractor
+    if downstream_model_path:
+        print('\n\n------------------------------------------------------------------------')
+        print(f'WARNING: IGNORING pretrained_model_path. Inference model path given. Full downstream model will be loaded.')
+        print('------------------------------------------------------------------------\n\n')
+        
+        assert model is not None, "This model implementation requires pretrained weights to be loaded first, even if they will be overwritten"
+        
+        state_dict = torch.load(downstream_model_path)
+        if world_rank == 0:
+            print(f'Loading inference model from {downstream_model_path}')
+
+        new_state_dict = OrderedDict()
+        
+        for key, value in state_dict.items():
+            # Remove 'module.' prefix if it exists
+            new_key = key.replace("module.", "")
+            new_state_dict[new_key] = value
+
+        # Load the modified state dictionary into the model
+        model.load_state_dict(new_state_dict, strict=True)
 
     # Parallelize model (DP or DDP) and print model summary
     if data_parallel == 'DP':
@@ -548,7 +571,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     elif data_parallel == 'DDP':
         model = nn.SyncBatchNorm.convert_sync_batchnorm(model).to(model_device)
         model = DDP(model, device_ids=[model_device], output_device=model_device)
-
 
 
     # Print model summary and module sizes
