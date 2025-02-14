@@ -149,8 +149,6 @@ def protocol_split(folder: str,
     else:
         from data_simulation import df_simulated_path
         df_simulated = pd.read_csv(df_simulated_path)
-
-        df_simulated = pd.read_csv('/home/ccollado/1_simulate_data/Major-TOM/df_simulation.csv')
         df = df_simulated['unique_identifier']
 
         folder_files = os.listdir(folder)
