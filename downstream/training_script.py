@@ -593,7 +593,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             model.to(model_device)
             print('Model moved back to CPU after summary') # sometimes summary moves model to GPU if available
 
-        valid_modules = ["module", "model", "encoder", "decoder", "module.encoder", "module.decoder"]
+        valid_modules = ["module", "model", "encoder", "decoder", "module.encoder", "module.decoder", "coreunet"]
 
         # Filter out invalid ones
         existing_modules = [
@@ -803,7 +803,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # 6. Training / testing / inference workflow
     # -----------------------------------------------------------------------
 
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     
     if train_mode == 'train_test_inference':
         trainer.train()
