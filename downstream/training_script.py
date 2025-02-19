@@ -890,13 +890,15 @@ if __name__ == "__main__":
     # 2. Run main function
     if True:
         n_shot_list = [0, 50, 100, 500, 1000, 5000]
+        # n_shot_list = [0]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
             for freeze_pretrained in [True, False]:
                 args.freeze_pretrained = freeze_pretrained
                 if n_shot == 0 and not freeze_pretrained:
                     continue
-                for downstream_task in ['', '_classification']:
+                for downstream_task in ['_classification']:
+                # for downstream_task in ['', '_classification']:
                     args.downstream_task = args.downstream_task + downstream_task
                     args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
                 

@@ -861,7 +861,7 @@ class TrainClassificationBuildings(TrainBase):
                 'mse': running_metric[0] / (k + 1),
                 'mae': running_metric[1] / (k + 1),
                 'mave': running_metric[2] / (k + 1),
-                'acc': running_metric[3] / (k + 1),
+                'acc': running_metric[3] / (k + 1), # this is actually Hamming loss if multi-label classfication
                 'precision_micro': precision_micro,
                 'recall_micro': recall_micro,
                 'f1_micro': f1_micro,
