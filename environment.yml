@@ -22,3 +22,6 @@ dependencies:
   - timm
   - pytorch-lightning
   - scikit-multilearn
+  - pip
+  - pip:
+      - buteo

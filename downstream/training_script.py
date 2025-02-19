@@ -889,7 +889,8 @@ if __name__ == "__main__":
 
     # 2. Run main function
     if True:
-        for n_shot in [0, 50, 100, 500, 1000, 5000]:
+        n_shot_list = [0, 50, 100, 500, 1000, 5000]
+        for n_shot in n_shot_list:
             args.n_shot = n_shot
             for freeze_pretrained in [True, False]:
                 args.freeze_pretrained = freeze_pretrained

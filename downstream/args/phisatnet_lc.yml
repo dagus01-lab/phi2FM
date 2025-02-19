@@ -24,13 +24,13 @@ warmup_gamma: 10
 min_lr: null
 pretrained_model_path: /Data/pretrained_weights/phisatnet/phisat2net_geoaware_epoch_19.pt
 freeze_pretrained: True
-data_path_128_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
-data_path_224_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
-data_path_224_30m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
+data_path_128_10m: /scratch/izar/ccollado/data/np_patches_128/
+data_path_224_10m: /scratch/izar/ccollado/data/np_patches_128/
+data_path_224_30m: /scratch/izar/ccollado/data/np_patches_224/
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
 downstream_model_path: /home/ccollado/2_phileo_fm/models/phisatnet_downstream/lc/10022025_PhiSatNetDownstream_frozen_lc_50/PhiSatNetDownstream_frozen_best.pt
-data_path_inference_128: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
-data_path_inference_224: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
+data_path_inference_128: /scratch/izar/ccollado/data/np_patches_128/
+data_path_inference_224: /scratch/izar/ccollado/data/np_patches_224/
 output_path: /home/ccollado/2_phileo_fm/models
 data_parallel: False
 device_ids: [0]
