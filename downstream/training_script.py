@@ -803,7 +803,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # 6. Training / testing / inference workflow
     # -----------------------------------------------------------------------
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     
     if train_mode == 'train_test_inference':
         trainer.train()
