@@ -1,9 +1,9 @@
 
-experiment_name: nshot_phi2/phi2_prithvi
+experiment_name: nshot_phi2/phi2_phileo_precursor
 downstream_task: building
-model_name: prithvi
+model_name: phileo_precursor
 augmentations: True
-batch_size: 48
+batch_size: 64
 model_device: cuda
 generator_device: cuda
 num_workers: 16
@@ -11,7 +11,7 @@ early_stop: 15
 epochs: 500
 input_channels: 10
 output_channels: 1
-input_size: 224
+input_size: 64
 lr: 0.0001
 lr_scheduler: reduce_on_plateau
 n_shot: 0
@@ -22,7 +22,7 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/pretrained_models/Prithvi_100M.pt # **********************************
+pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/newmodels/models/phileo-precursor_v09_e013.pt # **********************************
 freeze_pretrained: True
 data_path_128_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
 data_path_224_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
