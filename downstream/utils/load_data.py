@@ -212,7 +212,20 @@ def callback_preprocess_landcover_prithvi(x, y):
 
 
 def callback_preprocess_phisatnet(x, y):
-    assert x.shape[2] == 8, "Input x must have 8 channels for PHISAT2 classifier."
+    assert x.shape[2] == 8, "Input x must have 8 channels for phisatnet model."
+    
+    x = np.sqrt(x)
+    x = np.clip(x, PHISAT_MIN, PHISAT_MAX)
+    x = (x - PHISAT_MEAN) / PHISAT_STD
+    
+    x = x.astype(np.float32, copy=False)
+    y = y.astype(np.float32, copy=False)
+    
+    return x, y
+
+
+def callback_preprocess_phisatnet_lc(x, y):
+    assert x.shape[2] == 8, "Input x must have 8 channels for phisatnet model."
     
     x = np.sqrt(x)
     x = np.clip(x, PHISAT_MIN, PHISAT_MAX)
@@ -298,6 +311,10 @@ def callback_decoder_phisatnet(x, y):
     x, y = callback_preprocess_phisatnet(x, y)
     x, y = callback_postprocess_decoder(x, y)
 
+def callback_decoder_phisatnet_lc(x, y):
+    x, y = callback_preprocess_phisatnet_lc(x, y)
+    x, y = callback_postprocess_decoder(x, y)
+
     return x, y
 
 
@@ -321,7 +338,10 @@ def load_data(x_train, y_train, x_val, y_val, x_test, y_test, x_inference, y_inf
         else:
             cb_decoder = callback_decoder_prithvi
     elif model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
-        cb_decoder = callback_decoder_phisatnet
+        if downstream_task == 'lc':
+            cb_decoder = callback_decoder_phisatnet_lc
+        else:
+            cb_decoder = callback_decoder_phisatnet
     else:
         if downstream_task=='lc':
             cb_decoder = callback_decoder_landcover
@@ -352,7 +372,10 @@ def load_data(x_train, y_train, x_val, y_val, x_test, y_test, x_inference, y_inf
             else:
                 cb_preprocess = callback_preprocess_prithvi
         elif model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
-            cb_preprocess = callback_preprocess_phisatnet
+            if downstream_task == 'lc':
+                cb_preprocess = callback_preprocess_phisatnet_lc
+            else:
+                cb_preprocess = callback_preprocess_phisatnet
         else:
             if downstream_task=='lc':
                 cb_preprocess = callback_preprocess_landcover

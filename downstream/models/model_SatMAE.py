@@ -84,7 +84,7 @@ class ViTGroupedChannelsEncoder(nn.Module):
 
     def forward(self, x):
         # x is (N, C, H, W)
-        if x.dtype == torch.uint16:
+        if x.dtype == torch.int16:
             x = x.float()
         b, c, h, w = x.shape
 

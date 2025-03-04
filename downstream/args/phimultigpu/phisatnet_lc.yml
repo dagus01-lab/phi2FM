@@ -11,10 +11,10 @@ early_stop: 15
 epochs: 500
 input_channels: 8
 output_channels: 11
-input_size: 224
+input_size: 128
 lr: 0.0001
 lr_scheduler: reduce_on_plateau
-n_shot: 500
+n_shot: 0
 split_ratio: null
 regions: null
 vis_val: True
@@ -22,17 +22,17 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /Data/pretrained_weights/phisatnet/phisat2net_geoaware_epoch_19.pt
+pretrained_model_path: /home/phimultigpu/phisat2_foundation/models/pretrain/20250210_phisat2net_geoaware_1.0/phisat2net_geoaware_best.pt
 freeze_pretrained: True
-data_path_128_10m: /scratch/izar/ccollado/data/np_patches_128/
-data_path_224_10m: /scratch/izar/ccollado/data/np_patches_128/
-data_path_224_30m: /scratch/izar/ccollado/data/np_patches_224/
+data_path_128_10m: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
+data_path_224_10m: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
+data_path_224_30m: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
-downstream_model_path: /home/ccollado/2_phileo_fm/models/phisatnet_downstream/lc/10022025_PhiSatNetDownstream_frozen_lc_50/PhiSatNetDownstream_frozen_best.pt
-data_path_inference_128: /scratch/izar/ccollado/data/np_patches_128/
-data_path_inference_224: /scratch/izar/ccollado/data/np_patches_224/
-output_path: /home/ccollado/2_phileo_fm/models
-data_parallel: False
-device_ids: [0]
-pad_to_10_bands: False # required for models trained with 10 bands (all but phisatnet)
+downstream_model_path: null
+data_path_inference_128: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
+data_path_inference_224: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
+output_path: /home/phimultigpu/phisat2_foundation/models_phileobench
+data_parallel: DP
+device_ids: [0, 1, 2, 3]
+pad_to_10_bands: False
 only_get_datasets: False

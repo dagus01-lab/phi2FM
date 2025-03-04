@@ -33,6 +33,14 @@ from eolearn.core import EOTask
 
 import warnings
 
+from data_simulation.simulator.phisat2_constants import (
+    S2_BANDS,
+    S2_RESOLUTION,
+    BBOX_SIZE,
+    PHISAT2_RESOLUTION,
+    ProcessingLevels,
+    WORLD_GDF,
+)
 
 
 
@@ -248,14 +256,6 @@ def rgb_bands(dataset, normalize=False):
 def export_eop(eop, filename='eopatch_data.tif', include_metadata=True, metadata_option='full', include_masks=True, include_labels=False,
                include_clouds=True, lat_topleft=None, lon_topleft=None):
 
-    from phisat2_constants import (
-        S2_BANDS,
-        S2_RESOLUTION,
-        BBOX_SIZE,
-        PHISAT2_RESOLUTION,
-        ProcessingLevels,
-        WORLD_GDF,
-    )
 
     bands_to_include = [
         eop.data['PHISAT2-BANDS'][0]  # Always include PHISAT2-BANDS

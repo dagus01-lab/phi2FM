@@ -17,7 +17,7 @@ from sentinelhub import DataCollection
 from sentinelhub.exceptions import SHDeprecationWarning
 
 # Import local modules
-from data_simulation import sh_config
+from data_simulation import sh_config, climate_tif_path
 
 from data_simulation.simulator.phisat2_constants import (
     S2_RESOLUTION,
@@ -41,9 +41,6 @@ from data_simulation.simulator.utils import get_utm_bbox_from_top_left_and_size,
 import warnings
 
 warnings.filterwarnings("ignore", category=SHDeprecationWarning)
-
-
-TIFF_CLIMATE_PATH = "/home/ccollado/2_phileo_fm/pretrain/foundation_uniphi/climate_4326.tif"
 
 
 class phisat2simulation:
@@ -266,7 +263,7 @@ class phisat2simulation:
         # ----------------------------------------------------------------
         # 10. ADD CLIMATE ZONES
         # ----------------------------------------------------------------
-        climate_zones_task = AddClimateZones(tiff_climate=TIFF_CLIMATE_PATH)
+        climate_zones_task = AddClimateZones(tiff_climate=climate_tif_path)
 
         # ----------------------------------------------------------------
         # 11. SAVE IMAGE AS TIFF
@@ -307,7 +304,7 @@ class phisat2simulation:
 
         
         
-        return nodes, workflow
+        return workflow, nodes
 
     def run(self):
         if self.use_local_l1c:

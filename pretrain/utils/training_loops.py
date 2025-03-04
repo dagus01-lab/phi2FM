@@ -1197,9 +1197,6 @@ class TrainFoundation(TrainBase):
         log_sigmas_accum = defaultdict(float)
         log_scaled_accum = defaultdict(float)
         
-        # # Initialize the progress bar for training
-        # train_pbar = tqdm(self.train_loader, total=len(self.train_loader),
-        #                 desc=f"Epoch {epoch + 1}/{self.epochs}")
 
         if self.is_main_process:
             train_pbar = tqdm(self.train_loader, total=len(self.train_loader),
@@ -1221,7 +1218,7 @@ class TrainFoundation(TrainBase):
         # ) as prof:
         
         
-        # self.remove_log_layer()
+        self.remove_log_layer()
         
         if True:
 
@@ -1254,20 +1251,12 @@ class TrainFoundation(TrainBase):
                         outputs = self.model(images)
                         loss, log_loss = self.get_loss(outputs, labels)
 
-                    # for name, param in self.model.named_parameters():
-                    #     if torch.isnan(param).any() or torch.isinf(param).any():
-                    #         print(f"NaN/Inf detected in {name} before backward pass!")
-
                     self.scaler.scale(loss).backward()
                     self.scaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
-
-                    # for name, param in self.model.named_parameters():
-                    #     if param.grad is not None and (torch.isnan(param.grad).any() or torch.isinf(param.grad).any()):
-                    #         print(f"NaN/Inf detected in gradients of {name}!")
                     
                 # C) FP 16
                 elif self.train_precision == 'fp16':
@@ -1310,12 +1299,6 @@ class TrainFoundation(TrainBase):
                     for comp_key, comp_val in log_loss['scaled_loss'].items():
                         log_scaled_accum[comp_key] += comp_val
                 
-                # display progress on console
-                # train_pbar.set_postfix({
-                #     "loss": f"{train_loss / (i + 1):.4f}",
-                #     "lr": self.optimizer.param_groups[0]['lr']
-                # })
-
                 if self.is_main_process and isinstance(train_pbar, tqdm):
                     if self.fixed_task is None:
                         train_pbar.set_postfix({
@@ -1327,11 +1310,6 @@ class TrainFoundation(TrainBase):
                             "loss": f"{train_loss / (i + 1):.4f}",
                             "lr": self.optimizer.param_groups[0]['lr']
                         })
-
-                # # Update the scheduler if needed
-                # if self.lr_scheduler == 'cosine_annealing':
-                #     s.step()
-
         #         prof.step()
         
         # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
@@ -1382,7 +1360,7 @@ class TrainFoundation(TrainBase):
 
 
     def v_loop(self, epoch):
-        # self.log_layer()
+        self.log_layer()
         # Initialize the progress bar
 
         if self.is_main_process:

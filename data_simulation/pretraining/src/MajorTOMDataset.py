@@ -105,7 +105,7 @@ class MajorTOM(Dataset):
             # Stack bands along axis 0 to get array of shape (B, H, W)
             bands_array = np.stack(band_arrays, axis=0)
             # Convert to torch tensor
-            bands_tensor = torch.from_numpy(bands_array).float()
+            bands_tensor = torch.from_numpy(bands_array.astype(np.float32))
             # Apply transforms if any
             if self.tif_transforms is not None:
                 bands_tensor = self.tif_transforms(bands_tensor)
@@ -116,7 +116,7 @@ class MajorTOM(Dataset):
             for band in remaining_tif_bands:
                 with rio.open(path / '{}.tif'.format(band)) as f:
                     out = f.read(1)
-                out_tensor = torch.from_numpy(out).float()
+                out_tensor = torch.from_numpy(out.astype(np.float32))
                 if self.tif_transforms is not None:
                     out_tensor = self.tif_transforms(out_tensor)
                 out_dict[band] = out_tensor
@@ -124,7 +124,7 @@ class MajorTOM(Dataset):
             for band in self.tif_bands:
                 with rio.open(path / '{}.tif'.format(band)) as f:
                     out = f.read(1)
-                out_tensor = torch.from_numpy(out).float()
+                out_tensor = torch.from_numpy(out.astype(np.float32))
                 if self.tif_transforms is not None:
                     out_tensor = self.tif_transforms(out_tensor)
                 out_dict[band] = out_tensor
