@@ -38,13 +38,9 @@ from models.model_SatMAE import satmae_vit_cnn
 from models.models_Prithvi import prithvi
 from models.model_Seco import seasonal_contrast
 from models.model_Resnet50 import resnet
-<<<<<<< HEAD
-from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor
+from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor, PhileoPrecursorClassifier
 from models.model_moco_ssl4eo12 import moco_resnet
 from models.model_dino_ssl4eo12 import dino_resnet
-=======
-from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor, PhileoPrecursorClassifier
->>>>>>> e9ac037417c201c75bc91855fec3cba63e8bc704
 
 from pretrain.models.utils_fm import get_phisat2_model
 from downstream.models.phisatnet_downstream import PhiSatNetDownstream
@@ -73,12 +69,8 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        'GeoAware_core_autoencoder_nano', 'seasonal_contrast',
                        'GeoAware_core_nano_classifier', 'GeoAware_contrastive_core_nano_classifier',
                        'GeoAware_mh_pred_core_nano_classifier', 'seasonal_contrast_classifier',
-<<<<<<< HEAD
-                       'phileo_precursor', 'phisatnet', 'phisatnet_classifier',
-                       'moco', 'moco_classifier', 'dino', 'dino_classifier',
-=======
                        'phileo_precursor', 'phileo_precursor_classifier', 'phisatnet', 'phisatnet_classifier'
->>>>>>> e9ac037417c201c75bc91855fec3cba63e8bc704
+                       'moco', 'moco_classifier', 'dino', 'dino_classifier',
                        ]
 
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
@@ -243,6 +235,7 @@ def get_models(model_name, input_channels, output_channels, input_size):
 
 
 def get_models_pretrained(model_name, input_channels, output_channels, input_size, path_model_weights=None, freeze=False, device='cuda'):
+
     test_input = torch.rand((2,input_channels,input_size,input_size))
     
     if model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
@@ -579,11 +572,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
                 print(f"Ignoring freeze_pretrained set to {freeze_pretrained} as no pretrained model was supplied")
         model = get_models(model_name, input_channels, output_channels, input_size)
         NAME = model.__class__.__name__
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> e9ac037417c201c75bc91855fec3cba63e8bc704
     # If want to load weights of full downstream model, not just a feature extractor
     if downstream_model_path:
         print('\n\n------------------------------------------------------------------------')
@@ -612,7 +601,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     elif data_parallel == 'DDP':
         model = nn.SyncBatchNorm.convert_sync_batchnorm(model).to(model_device)
         model = DDP(model, device_ids=[model_device], output_device=model_device)
-    
+
+
     # Print model summary and module sizes
     if world_rank == 0:
         input_sizes = {
@@ -930,16 +920,16 @@ if __name__ == "__main__":
 
     # 2. Run main function
     if True:
+        # n_shot_list = [0, 50, 100, 500, 1000, 5000]
         n_shot_list = [0, 50, 100, 500, 1000, 5000]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
             for freeze_pretrained in [True, False]:
-            # for freeze_pretrained in [False]:
                 args.freeze_pretrained = freeze_pretrained
                 if n_shot == 0 and not freeze_pretrained:
                     continue
-                # for downstream_task in ['']:
-                for downstream_task in ['_classification']:
+                for downstream_task in ['']:
+                # for downstream_task in ['_classification']:
                 # for downstream_task in ['', '_classification']:
                     args.downstream_task = args.downstream_task + downstream_task
                     args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
