@@ -1,7 +1,7 @@
 
-experiment_name: nshot_phi2/phi2_vit_cnn_gc
-downstream_task: lc
-model_name: vit_cnn_gc
+experiment_name: nshot_phi2/phi2_GeoAware
+downstream_task: building
+model_name: GeoAware_mh_pred_core_nano
 augmentations: True
 batch_size: 64
 model_device: cuda
@@ -10,7 +10,7 @@ num_workers: 16
 early_stop: 15
 epochs: 500
 input_channels: 10
-output_channels: 11
+output_channels: 1
 input_size: 128
 lr: 0.0001
 lr_scheduler: reduce_on_plateau
@@ -22,7 +22,7 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/phisat2/phisat2_foundation/pretrained_models/03112023_MaskedAutoencoderGroupChannelViT/MaskedAutoencoderGroupChannelViT_ckpt.pt
+pretrained_model_path: /home/phisat2/pretrained_weights/CoreEncoderMultiHead_geo_pred_best.pt
 freeze_pretrained: True
 data_path_128_10m: /Data_phisat2/np_patches_128/
 data_path_224_10m: null
