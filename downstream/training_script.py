@@ -69,7 +69,7 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        'GeoAware_core_autoencoder_nano', 'seasonal_contrast',
                        'GeoAware_core_nano_classifier', 'GeoAware_contrastive_core_nano_classifier',
                        'GeoAware_mh_pred_core_nano_classifier', 'seasonal_contrast_classifier',
-                       'phileo_precursor', 'phileo_precursor_classifier', 'phisatnet', 'phisatnet_classifier'
+                       'phileo_precursor', 'phileo_precursor_classifier', 'phisatnet', 'phisatnet_classifier',
                        'moco', 'moco_classifier', 'dino', 'dino_classifier',
                        ]
 
@@ -553,7 +553,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     if pretrained_model_path is not None:
         if world_rank == 0:
             print('model_name: ', model_name)
-        assert model_name in (CNN_PRETRAINED_LIST + VIT_CNN_PRETRAINED_LIST), f"Pretrained weights were given but model {model_name} not found in list of pretrained models: {(CNN_PRETRAINED_LIST + VIT_CNN_PRETRAINED_LIST)}"
+        assert model_name in (CNN_PRETRAINED_LIST + VIT_CNN_PRETRAINED_LIST), f"Pretrained weights were given but model {model_name} not found in list of pretrained models: {CNN_PRETRAINED_LIST + VIT_CNN_PRETRAINED_LIST}"
         assert freeze_pretrained is not None, f"When supplying a pretrained model 'freeze_pretrained' must be either True or False"
         model = get_models_pretrained(model_name, input_channels, output_channels, input_size, path_model_weights=pretrained_model_path, freeze=freeze_pretrained)
         if model_name == 'GeoAware_contrastive_core_nano' or model_name == 'GeoAware_contrastive_core_nano_classifier':
@@ -617,7 +617,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         }
 
         input_size = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
-        import pdb; pdb.set_trace()
         model_summary = summary(model, input_size=input_size, dtypes=[torch.float32])
 
         if model_device == 'cpu':
