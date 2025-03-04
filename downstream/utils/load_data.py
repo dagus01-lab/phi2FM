@@ -48,8 +48,6 @@ PHISAT_MEAN = np.array([39.91732045, 37.5492021, 37.54950869, 39.21091477, 44.26
 PHISAT_STD = np.array([17.06368142, 17.08672835, 20.21215486, 17.8629414, 20.11975944, 20.02886564, 19.79381833, 20.16760416])
 
 
-PROCESS_PHISAT = True
-
 
 def to_one_hot_lc(y, class_labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])):
     y_classification = np.isin(class_labels, y).astype(np.float32)
@@ -67,13 +65,39 @@ def to_one_hot_building(y):
 
 
 
-def sentinelNormalize(x):
-    if PROCESS_PHISAT:
-        if x.shape[2] == 8:
+def pad_bands(x):
+    if x.shape[2] == 8:
+        if PROCESS_PHISAT == 10:
             x = np.delete(x, 3, axis=2)
             zeros_shape = (x.shape[0], x.shape[1], 3)
             zeros = np.zeros(zeros_shape, dtype=x.dtype)
             x = np.concatenate((x, zeros), axis=2)
+    
+        elif PROCESS_PHISAT == 13:
+            # Remove PAN (assumed to be at index 3)
+            x = np.delete(x, 3, axis=2)  # Now x has 7 channels: [B02, B03, B04, B08, B05, B06, B07]
+            H, W, _ = x.shape
+
+            # Create an output array of zeros with 13 channels
+            out = np.zeros((H, W, 13), dtype=x.dtype)
+
+            # Map the available channels to the proper positions:
+            # Sentinel-2 L1C ordering: 0: B1 (pad), 1: B02, 2: B03, 3: B04, 4: B05, 5: B06, 6: B07, 7: B08, 8: B8A, 9: B9, 10: B10, 11: B11, 12: B12
+            out[..., 1] = x[..., 0]  # B02
+            out[..., 2] = x[..., 1]  # B03
+            out[..., 3] = x[..., 2]  # B04
+            out[..., 7] = x[..., 3]  # B08
+            out[..., 4] = x[..., 4]  # B05
+            out[..., 5] = x[..., 5]  # B06
+            out[..., 6] = x[..., 6]  # B07
+            # The remaining bands (B1, B8A, B9, B10, B11, B12) remain 0.
+            x = out
+    return x
+
+
+def sentinelNormalize(x):
+    if PROCESS_PHISAT is not None:
+        x = pad_bands(x)
             
         min_value = MEANS_SATMAE_PHI2 - 2 * STDS_SATMAE_PHI2
         max_value = MEANS_SATMAE_PHI2 + 2 * STDS_SATMAE_PHI2
@@ -87,12 +111,8 @@ def sentinelNormalize(x):
     return img
 
 def preprocess_image_prithvi(image):
-    if PROCESS_PHISAT:
-        if image.shape[2] == 8:
-            image = np.delete(image, 3, axis=2)
-            zeros_shape = (image.shape[0], image.shape[1], 3)
-            zeros = np.zeros(zeros_shape, dtype=image.dtype)
-            image = np.concatenate((image, zeros), axis=2)
+    if PROCESS_PHISAT is not None:
+        image = pad_bands(image)
         
         normalized = image.copy()
         normalized = ((image - MEANS_PRITHVI_PHI2) / STDS_PRITHVI_PHI2)
@@ -107,13 +127,7 @@ def preprocess_image_prithvi(image):
     return normalized
 
 def callback_preprocess(x, y):
-    if PROCESS_PHISAT:
-        if x.shape[2] == 8:
-            x = np.delete(x, 3, axis=2)
-            zeros_shape = (x.shape[0], x.shape[1], 3)
-            zeros = np.zeros(zeros_shape, dtype=x.dtype)
-            x = np.concatenate((x, zeros), axis=2)
-
+    x = pad_bands(x)
     x_norm = np.empty_like(x, dtype=np.float32)
     np.divide(x, 10000.0, out=x_norm)
 
@@ -123,12 +137,7 @@ def callback_preprocess(x, y):
 
 
 def callback_preprocess_satmae(x, y):
-    if PROCESS_PHISAT:
-        if x.shape[2] == 8:
-            x = np.delete(x, 3, axis=2)
-            zeros_shape = (x.shape[0], x.shape[1], 3)
-            zeros = np.zeros(zeros_shape, dtype=x.dtype)
-            x = np.concatenate((x, zeros), axis=2)
+    x = pad_bands(x)
     x_norm = sentinelNormalize(x)
     y = y.astype(np.float32, copy=False)
 
@@ -141,7 +150,7 @@ def callback_preprocess_satmae(x, y):
 def callback_preprocess_prithvi(x, y):
     # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
     # HLS bands: 0-B02, 1-B03, 2-B04, 4-B05, 5-B06, 6-B07,
-    if PROCESS_PHISAT:
+    if PROCESS_PHISAT == 10:
         x = x[:, :, (0, 1, 2, 5, 6, 7)] 
     else:
         x = x[:, :, (0, 1, 2, 4, 5, 6)] 
@@ -152,13 +161,7 @@ def callback_preprocess_prithvi(x, y):
 
 
 def callback_preprocess_landcover(x, y):
-    if PROCESS_PHISAT:
-        if x.shape[2] == 8:
-            x = np.delete(x, 3, axis=2)
-            zeros_shape = (x.shape[0], x.shape[1], 3)
-            zeros = np.zeros(zeros_shape, dtype=x.dtype)
-            x = np.concatenate((x, zeros), axis=2)
-
+    x = pad_bands(x)
     x_norm = np.empty_like(x, dtype=np.float32)
     np.divide(x, 10000.0, out=x_norm)
 
@@ -169,13 +172,7 @@ def callback_preprocess_landcover(x, y):
 
 
 def callback_preprocess_building_classification(x, y):
-    if PROCESS_PHISAT:
-        if x.shape[2] == 8:
-            x = np.delete(x, 3, axis=2)
-            zeros_shape = (x.shape[0], x.shape[1], 3)
-            zeros = np.zeros(zeros_shape, dtype=x.dtype)
-            x = np.concatenate((x, zeros), axis=2)
-
+    x = pad_bands(x)
     x_norm = np.empty_like(x, dtype=np.float32)
     np.divide(x, 10000.0, out=x_norm)
 
@@ -199,7 +196,7 @@ def callback_preprocess_landcover_satmae(x, y):
 def callback_preprocess_landcover_prithvi(x, y):
     # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
     # HLS bands: 0-B02, 1-B03, 2-B04, 4-B05, 5-B06, 6-B07,
-    if PROCESS_PHISAT:
+    if PROCESS_PHISAT == 10:
         x = x[:, :, (0, 1, 2, 5, 6, 7)] # throw away unused bands
     else:
         x = x[:, :, (0, 1, 2, 4, 5, 6)] # throw away unused bands
@@ -302,13 +299,13 @@ def callback_decoder_phisatnet(x, y):
 
 
 def load_data(x_train, y_train, x_val, y_val, x_test, y_test, x_inference, y_inference, device, with_augmentations=False, num_workers=0,
-              batch_size=16, downstream_task=None, model_name=None, pad_to_10_bands=False):
+              batch_size=16, downstream_task=None, model_name=None, pad_bands=False):
     
     """
     Loads the data from the data folder.
     """
     global PROCESS_PHISAT
-    PROCESS_PHISAT = pad_to_10_bands
+    PROCESS_PHISAT = pad_bands
     
     if model_name == 'SatMAE' or model_name == 'SatMAE_classifier':
         if downstream_task == 'lc':

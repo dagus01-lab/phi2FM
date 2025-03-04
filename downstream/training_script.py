@@ -39,6 +39,8 @@ from models.models_Prithvi import prithvi
 from models.model_Seco import seasonal_contrast
 from models.model_Resnet50 import resnet
 from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor
+from models.model_moco_ssl4eo12 import moco_resnet
+from models.model_dino_ssl4eo12 import dino_resnet
 
 from pretrain.models.utils_fm import get_phisat2_model
 from downstream.models.phisatnet_downstream import PhiSatNetDownstream
@@ -67,7 +69,8 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        'GeoAware_core_autoencoder_nano', 'seasonal_contrast',
                        'GeoAware_core_nano_classifier', 'GeoAware_contrastive_core_nano_classifier',
                        'GeoAware_mh_pred_core_nano_classifier', 'seasonal_contrast_classifier',
-                       'phileo_precursor', 'phisatnet', 'phisatnet_classifier'
+                       'phileo_precursor', 'phisatnet', 'phisatnet_classifier',
+                       'moco', 'moco_classifier', 'dino', 'dino_classifier',
                        ]
 
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
@@ -375,6 +378,23 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         seco_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
         return seasonal_contrast(checkpoint=path_model_weights, freeze_body=freeze, classifier=True,
                                  **seco_kwargs)
+    
+    elif model_name == 'moco':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=False, **resnet_kwargs)
+    
+    elif model_name == 'moco_classifier':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=True, **resnet_kwargs)
+    
+    elif model_name == 'dino':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return dino_resnet(path_model_weights, classifier=False, **resnet_kwargs)
+    
+    elif model_name == 'dino_classifier':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return dino_resnet(path_model_weights, classifier=True, **resnet_kwargs)
+    
     else:
         raise ValueError(f'Unknown model name: {model_name}')
 
@@ -429,7 +449,7 @@ def get_args():
     parser.add_argument('--device_ids', type=list, default=[0, 1, 2, 3])
     parser.add_argument('--warmp_steps', type=int, default=5)
     parser.add_argument('--warmup_gamma', type=int, default=10)
-    parser.add_argument('--pad_to_10_bands', type=bool, default=True)
+    parser.add_argument('--pad_bands', type=int, default=10)
     parser.add_argument('--min_lr', type=float, default=1e-6)
 
 
@@ -443,7 +463,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         epochs, input_channels, output_channels, input_size, lr, lr_scheduler, n_shot, split_ratio, regions, vis_val, warmup, warmp_steps, 
         warmup_gamma, pretrained_model_path, freeze_pretrained, data_path_128_10m, data_path_224_10m, data_path_224_30m, data_path_inference_128, 
         data_path_inference_224, train_mode, downstream_model_path, output_path, data_parallel, 
-        device_ids, only_get_datasets, pad_to_10_bands, min_lr):
+        device_ids, only_get_datasets, pad_bands, min_lr):
     """ 
     main script for PhilEO Bench. Used to run model training experiments with randomly initialized and pre-trained models on a number of downstream tasks. 
     The script handles dataset creation (based on data protocol options selected), data preprocessing (based on downstream task & model type) & model, training, validation and testing. 
@@ -488,7 +508,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         data_parallel (str, optional): If set to True Model training will be parallized on multiple gpus. Defaults to None.
         device_ids (list, optional): Define GPU IDs to use for parallization. Defaults to None.
         only_get_datasets (bool, optional): If set to True only datasets will be created, but no training will occur. Defaults to False.
-        pad_to_10_bands (bool, optional): If set to True data will be padded to 10 bands. Defaults to False.
+        pad_bands (int, optional): To what number of bands to pad. Defaults to 10.
         min_lr (float, optional): Define minimum learning rate for cosine annealing scheduler and warmup. Defaults to 1e-6.
     """
 
@@ -542,7 +562,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         model = get_models(model_name, input_channels, output_channels, input_size)
         NAME = model.__class__.__name__
 
-
     # If want to load weights of full downstream model, not just a feature extractor
     if downstream_model_path:
         print('\n\n------------------------------------------------------------------------')
@@ -587,6 +606,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         }
 
         input_size = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
+        import pdb; pdb.set_trace()
         model_summary = summary(model, input_size=input_size, dtypes=[torch.float32])
 
         if model_device == 'cpu':
@@ -744,7 +764,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         downstream_task=downstream_task,
         model_name=model_name.split('_')[0],
         device=generator_device,
-        pad_to_10_bands=pad_to_10_bands,
+        pad_bands=pad_bands,
     )
     
     # Log dataloader sizes and training model
@@ -803,7 +823,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # 6. Training / testing / inference workflow
     # -----------------------------------------------------------------------
 
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     
     if train_mode == 'train_test_inference':
         trainer.train()
@@ -897,8 +917,8 @@ if __name__ == "__main__":
                 args.freeze_pretrained = freeze_pretrained
                 if n_shot == 0 and not freeze_pretrained:
                     continue
-                for downstream_task in ['']:
-                # for downstream_task in ['_classification']:
+                # for downstream_task in ['']:
+                for downstream_task in ['_classification']:
                 # for downstream_task in ['', '_classification']:
                     args.downstream_task = args.downstream_task + downstream_task
                     args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
