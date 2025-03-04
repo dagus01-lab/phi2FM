@@ -33,7 +33,7 @@ region = box(adjusted_left, adjusted_bottom, adjusted_right, adjusted_top)
 
 # FILTER AND FORMAT THE DATAFRAME
 filtered_df = filter_metadata(gdf,
-                              cloud_cover = (0,5), # cloud cover between 0% and 10%
+                              cloud_cover = (0,5), # cloud cover between 0% and 5%
                               region = region,
                               daterange=('2020-01-01', '2025-01-01'),
                               nodata=(0.0,0.0) # only 0% of no data allowed

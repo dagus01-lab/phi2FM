@@ -900,8 +900,7 @@ if __name__ == "__main__":
 
     # 2. Run main function
     if True:
-        # n_shot_list = [50, 100, 500, 1000, 5000]
-        n_shot_list = [0, 50]
+        n_shot_list = [0, 50, 100, 500, 1000, 5000]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
             for freeze_pretrained in [True, False]:
