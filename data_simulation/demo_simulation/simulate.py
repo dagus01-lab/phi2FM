@@ -14,7 +14,10 @@ ACCESS_URL = 'https://huggingface.co/datasets/{}/resolve/main/metadata.parquet?d
 LOCAL_URL = DATASET_DIR / '{}.parquet'.format(ACCESS_URL.split('.parquet')[0].split('/')[-1])
 
 local_dir='./data/'
+<<<<<<< HEAD
 
+=======
+>>>>>>> 61da11ed9b6126f30a7ef8ab5a183e9992a8b668
 
 gdf = metadata_from_url(ACCESS_URL, LOCAL_URL)
 

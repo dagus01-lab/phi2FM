@@ -7,10 +7,10 @@ from tqdm import tqdm
 import multiprocessing
 
 # Adjust this path to where your .npy files are stored
-DATA_DIR = "/home/phimultigpu/phisat2_foundation/np_patches_256_ind"
+DATA_DIR = "/home/ccollado/phileo_phisat2/MajorTOM/np_patches_256_crop_1536_ind"
 
 # Output folder for separate LMDB files
-LMDB_OUTPUT_DIR = "/home/phimultigpu/phisat2_foundation/lmdb_patches_256_1024"
+LMDB_OUTPUT_DIR = "/home/ccollado/phileo_phisat2/MajorTOM/lmdb_patches_256_1536"
 os.makedirs(LMDB_OUTPUT_DIR, exist_ok=True)
 
 # Regex to identify the three file types
@@ -113,9 +113,9 @@ def main():
     val_lmdb   = os.path.join(LMDB_OUTPUT_DIR, "val.lmdb")
     test_lmdb  = os.path.join(LMDB_OUTPUT_DIR, "test.lmdb")
 
-    write_lmdb(train_records, train_lmdb, 1 << 39)  # Train set
-    # write_lmdb(val_records, val_lmdb, 1 << 38)      # Validation set
-    # write_lmdb(test_records, test_lmdb, 1 << 38)    # Test set
+    # write_lmdb(train_records, train_lmdb, 1 << 39)  # Train set
+    write_lmdb(val_records, val_lmdb, 1 << 38)      # Validation set
+    write_lmdb(test_records, test_lmdb, 1 << 38)    # Test set
 
     print("All LMDBs created successfully.")
 

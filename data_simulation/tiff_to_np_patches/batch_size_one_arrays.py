@@ -5,8 +5,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 
 # Define input and output directories
-input_dir = "/home/phimultigpu/phisat2_foundation/np_patches_256"
-output_dir = "/home/phimultigpu/phisat2_foundation/np_patches_256_ind"
+input_dir = "/home/ccollado/phileo_phisat2/MajorTOM/np_patches_256_crop_1536"
+output_dir = "/home/ccollado/phileo_phisat2/MajorTOM/np_patches_256_crop_1536_ind"
 
 # Ensure the output directory exists
 os.makedirs(output_dir, exist_ok=True)

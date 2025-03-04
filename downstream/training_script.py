@@ -38,7 +38,7 @@ from models.model_SatMAE import satmae_vit_cnn
 from models.models_Prithvi import prithvi
 from models.model_Seco import seasonal_contrast
 from models.model_Resnet50 import resnet
-from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor
+from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor, PhileoPrecursorClassifier
 
 from pretrain.models.utils_fm import get_phisat2_model
 from downstream.models.phisatnet_downstream import PhiSatNetDownstream
@@ -67,7 +67,7 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        'GeoAware_core_autoencoder_nano', 'seasonal_contrast',
                        'GeoAware_core_nano_classifier', 'GeoAware_contrastive_core_nano_classifier',
                        'GeoAware_mh_pred_core_nano_classifier', 'seasonal_contrast_classifier',
-                       'phileo_precursor', 'phisatnet', 'phisatnet_classifier'
+                       'phileo_precursor', 'phileo_precursor_classifier', 'phisatnet', 'phisatnet_classifier'
                        ]
 
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
@@ -298,6 +298,17 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         if 'padding' in core_kwargs.keys():
             core_kwargs.pop('padding')
         model = PhileoPrecursor(output_dim=output_channels, checkpoint=sd, core_encoder_kwargs=core_kwargs, freeze_body=freeze)
+        model(test_input)
+        return model
+
+    elif model_name == 'phileo_precursor_classifier':
+        sd = torch.load(path_model_weights)
+        core_kwargs = get_core_encoder_kwargs(output_dim=output_channels, input_dim=input_channels, core_size='core_nano')
+        if 'norm' in core_kwargs.keys():
+            core_kwargs.pop('norm')
+        if 'padding' in core_kwargs.keys():
+            core_kwargs.pop('padding')
+        model = PhileoPrecursorClassifier(output_dim=output_channels, checkpoint=sd, core_encoder_kwargs=core_kwargs, freeze_body=freeze)
         model(test_input)
         return model
 
@@ -664,7 +675,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         
     # Determine if cropping (model requires smaller images), if use by region (prob only relevant to PhilEO-Bench), 
     # and set weights or pos_weight for loss function
-    crop_images = True if model_name == 'phileo_precursor' else False
+    crop_images = True if model_name == 'phileo_precursor' or model_name == 'phileo_precursor_classifier' else False
     by_region = False if downstream_task == 'coords' else True
     pos_weight, weights = None, None
 
@@ -886,11 +897,11 @@ if __name__ == "__main__":
 
     # 2. Run main function
     if True:
-        # n_shot_list = [0, 50, 100, 500, 1000, 5000]
-        n_shot_list = [5000, 1000, 500, 100, 50, 0]
+        n_shot_list = [0, 50, 100, 500, 1000, 5000]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
             for freeze_pretrained in [True, False]:
+            # for freeze_pretrained in [False]:
                 args.freeze_pretrained = freeze_pretrained
                 if n_shot == 0 and not freeze_pretrained:
                     continue

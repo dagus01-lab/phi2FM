@@ -341,7 +341,7 @@ def to_one_hot_building(y):
 def load_and_crop(file_path, crop_image):
     """ Load a numpy file and crop it to 64x64 from the top-left corner """
     data = np.load(file_path, mmap_mode='r')
-    if crop_image:
+    if crop_image and data.ndim >= 3:
         data = data[:64, :64] if data.ndim == 3 else data[:, :64, :64, :]  # Handle both individual and batch files
     return data
 

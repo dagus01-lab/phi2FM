@@ -24,44 +24,48 @@ import buteo as beo
 from sklearn.model_selection import train_test_split
 from pyproj import Transformer
 
+
 def encode_latitude(lat):
-    """ Latitude goes from -90 to 90 """
-    lat_adj = lat + 90.0
-    lat_max = 180
-
-    encoded_sin = ((np.sin(2 * np.pi * (lat_adj / lat_max)) + 1)) / 2.0
-    encoded_cos = ((np.cos(2 * np.pi * (lat_adj / lat_max)) + 1)) / 2.0
-
+    """ 
+    Encode latitude in the range [-90, 90] using the WRAP approach.
+    Normalizes to [-1, 1] and computes sine and cosine.
+    """
+    # Normalize latitude to [-1, 1]
+    lat_normalized = lat / 90.0
+    encoded_sin = np.sin(np.pi * lat_normalized)
+    encoded_cos = np.cos(np.pi * lat_normalized)
+    # Returns shape (2, N)
     return np.array([encoded_sin, encoded_cos], dtype=np.float32)
 
-
 def encode_longitude(lng):
-    """ Longitude goes from -180 to 180 """
-    lng_adj = lng + 180.0
-    lng_max = 360
-
-    encoded_sin = ((np.sin(2 * np.pi * (lng_adj / lng_max)) + 1)) / 2.0
-    encoded_cos = ((np.cos(2 * np.pi * (lng_adj / lng_max)) + 1)) / 2.0
-
+    """
+    Encode longitude in the range [-180, 180] using the WRAP approach.
+    Normalizes to [-1, 1] and computes sine and cosine.
+    """
+    # Normalize longitude to [-1, 1]
+    lng_normalized = lng / 180.0
+    encoded_sin = np.sin(np.pi * lng_normalized)
+    encoded_cos = np.cos(np.pi * lng_normalized)
+    # Returns shape (2, N)
     return np.array([encoded_sin, encoded_cos], dtype=np.float32)
 
 def encode_coordinates(coords):
-    lat_values = coords[:, 0]
-    lon_values = coords[:, 1]
-    encoded_lat = encode_latitude(lat_values)
-    encoded_lon = encode_longitude(lon_values)
+    """
+    Expects coords to be a 2D numpy array of shape (N, 2) where each row is [lat, lon].
+    Returns a numpy array of shape (N, 4) with columns:
+    [sin(lat_encoded), cos(lat_encoded), sin(lon_encoded), cos(lon_encoded)].
+    """
+    lat_values = coords[:, 0]  # shape (N,)
+    lon_values = coords[:, 1]  # shape (N,)
+    
+    encoded_lat = encode_latitude(lat_values)  # shape (2, N)
+    encoded_lon = encode_longitude(lon_values)   # shape (2, N)
+    
+    # Concatenate along the first axis -> shape becomes (4, N)
     encoded_coords = np.concatenate((encoded_lat, encoded_lon), axis=0)
+    # Transpose to shape (N, 4)
     encoded_coords = np.transpose(encoded_coords)
     return encoded_coords
-
-# def encode_coordinates(coords):
-#     lat = (-coords[:, 0] + 90) / 180
-
-#     long = coords[:, 1]
-#     long_sin = (np.sin(long * 2 * np.pi / 360) + 1) / 2
-#     long_cos = (np.cos(long * 2 * np.pi / 360) + 1) / 2
-
-#     return np.column_stack([lat, long_sin, long_cos])
 
 
 def create_patches_from_tiffs(
