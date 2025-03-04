@@ -22,16 +22,16 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/pretrained_models/03112023_MaskedAutoencoderGroupChannelViT/MaskedAutoencoderGroupChannelViT_ckpt.pt # **********************************
+pretrained_model_path: /home/phimultigpu/phileo_NFS/phileo_data/pretrained_models/03112023_MaskedAutoencoderGroupChannelViT/MaskedAutoencoderGroupChannelViT_ckpt.pt
 freeze_pretrained: True
-data_path_128_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
-data_path_224_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
-data_path_224_30m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
+data_path_128_10m: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
+data_path_224_10m: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
+data_path_224_30m: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
 downstream_model_path: null
-data_path_inference_128: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
-data_path_inference_224: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
-output_path: /home/ccollado/2_phileo_fm/models
+data_path_inference_128: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
+data_path_inference_224: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_128/
+output_path: /home/phimultigpu/phisat2_foundation/models_phileobench
 data_parallel: False
 device_ids: [0]
 pad_to_10_bands: True # required for models trained with 10 bands (all but phisatnet)

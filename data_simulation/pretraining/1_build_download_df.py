@@ -29,7 +29,7 @@ adjusted_right = right - margin
 adjusted_top = top - margin
 
 region = box(adjusted_left, adjusted_bottom, adjusted_right, adjusted_top)
-
+import pdb; pdb.set_trace()
 
 # FILTER AND FORMAT THE DATAFRAME
 filtered_df = filter_metadata(gdf,

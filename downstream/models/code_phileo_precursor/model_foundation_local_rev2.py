@@ -8,6 +8,7 @@ class FoundationEncoder(nn.Module):
         self,
         *,
         input_dim=3,
+        output_dim=2,
         depths=None,
         dims=None,
         img_size=64,
@@ -19,11 +20,20 @@ class FoundationEncoder(nn.Module):
         self.depths = depths
         self.dims = dims
         self.input_dim = input_dim
+        self.output_dim = output_dim
         self.img_size = img_size
         self.latent_dim = latent_dim
         self.steps = 1
         self.sizes = [img_size]
+        if type(activation) == str:
+            if activation == "relu":
+                activation = nn.ReLU()
+            elif activation == "leakyrelu":
+                activation = nn.LeakyReLU()
+            else:
+                raise ValueError("Invalid activation function")
         self.activation = activation
+        print('OUTPUT DIM', output_dim)
 
         for i in range(len(self.depths) - 1):
             half = self.sizes[-1] // 2
@@ -64,26 +74,12 @@ class FoundationEncoder(nn.Module):
             nn.LayerNorm(self.latent_dim),
         )
 
-        self.head_clouds = nn.Sequential(
-            nn.Linear(self.latent_dim, 4),
+        self.head = nn.Sequential(
+            nn.Linear(self.latent_dim, self.output_dim),
         )
-
-        self.head_landcover = nn.Sequential(
-            nn.Linear(self.latent_dim, 11),
-        )
-
-        self.head_buildings = nn.Sequential(
-            nn.Linear(self.latent_dim, 1),
-            nn.Sigmoid(),
-        )
-
-        self.head_coords = nn.Sequential(
-            nn.Linear(self.latent_dim, 4),
-            nn.Sigmoid(),
-        )
-
-
+        
     def forward(self, x):
+
         skips = []
 
         for i in range(self.steps):
@@ -103,21 +99,13 @@ class FoundationEncoder(nn.Module):
         embeddings_cnn = self.prelinear_norm(x)
         flat = embeddings_cnn.reshape(-1, self.linear_dim)
         embeddings = self.linear_encode(flat)
-        out_coords = self.head_coords(embeddings) # 4
-        out_clouds = self.head_clouds(embeddings) # 4
-        out_buildings = self.head_buildings(embeddings)
-        out_landcover = self.head_landcover(embeddings)
+        out = self.head(embeddings)
 
         return (
             embeddings,
             embeddings_cnn,
             skips,
-            (
-                out_coords,
-                out_clouds,
-                out_buildings,
-                out_landcover,
-            )
+            out
         )
 
 
@@ -287,6 +275,66 @@ class Foundation(nn.Module):
         return reconstruction, embeddings, embeddings_cnn, decoded, predictions
 
 
+class FoundationClassifier(nn.Module):  
+    def __init__(
+        self,
+        *,
+        input_dim=3,
+        output_dim=None,
+        depths=None,
+        dims=None,
+        img_size=64,
+        latent_dim=512,
+        dropout=None,
+        activation=nn.LeakyReLU(),
+    ):
+        super().__init__()
+
+        self.input_dim = input_dim
+        self.output_dim = input_dim if output_dim is None else output_dim
+        self.depths = depths
+        self.dims = dims
+        self.img_size = img_size
+        self.latent_dim = latent_dim
+        self.dropout = dropout
+        if type(activation) == str:
+            if activation == "relu":
+                activation = nn.ReLU()
+            elif activation == "leakyrelu":
+                activation = nn.LeakyReLU()
+            else:
+                raise ValueError("Invalid activation function")
+        self.activation = activation
+
+        self.stem = CNNBlock(
+            input_dim,
+            dims[0],
+            chw=[input_dim, img_size, img_size],
+            activation=self.activation,
+        )
+
+        self.encoder = FoundationEncoder(
+            input_dim=dims[0],
+            depths=depths,
+            dims=dims,
+            img_size=img_size,
+            latent_dim=latent_dim,
+            activation=self.activation,
+            output_dim=output_dim,
+        )
+
+        self.head = nn.Sequential(
+            nn.Linear(self.latent_dim, self.output_dim),
+        )
+
+    def forward(self, x):
+        x = self.stem(x)
+        embeddings, _, _, _ = self.encoder(x)
+        out = self.head(embeddings)
+
+        return out
+
+
 # EDITS TO THE CODE BELOW THIS LINE
 
 class PhileoPrecursor(nn.Module):
@@ -313,52 +361,34 @@ class PhileoPrecursor(nn.Module):
 
     def forward(self, x):
         reconstruction, embeddings, embeddings_cnn, decoded, predictions = self.model(x)
-        return reconstruction # Return the landcover prediction
+        return reconstruction
 
 
-
-# THIS MAY NOT BE RELEVANT
-
-class FoundationClassifier(nn.Module):
-    def __init__(self, checkpoint, output_dim=1, **kwargs):
-        super(FoundationClassifier, self).__init__()
-        self.model = Foundation(output_dim=output_dim, **kwargs)
-        # Load the checkpoint
-        state_dict = torch.load(checkpoint)
-        self.model.load_state_dict(state_dict)
-        # Define the classifier head
-        self.head = nn.Sequential(
-            nn.Linear(self.model.latent_dim, self.model.latent_dim),
-            nn.ReLU(),
-            nn.Linear(self.model.latent_dim, output_dim)
-        )
+class PhileoPrecursorClassifier(nn.Module):
+    def __init__(self,
+                 output_dim,
+                 checkpoint,
+                 core_encoder_kwargs,
+                 freeze_body=True,
+                 ):
+        self.freeze_body = freeze_body
+        super(PhileoPrecursorClassifier, self).__init__()
+        
+        self.model = FoundationClassifier(**core_encoder_kwargs)
+        
+        assert output_dim == core_encoder_kwargs['output_dim'], f"output dim {output_dim} but core_unet will output {core_encoder_kwargs['output_dim']}"
+        
+        # Load the pre-trained model
+        self.model.load_state_dict(checkpoint, strict=False)
+        
+        if self.freeze_body:
+            for name, param in self.model.named_parameters():
+                if name.startswith('stem') or name.startswith('encoder'):
+                    param.requires_grad = False
 
     def forward(self, x):
-        # Pass through the stem and encoder
-        x = self.model.stem(x)
-        embeddings, embeddings_cnn, skips, predictions = self.model.encoder(x)
-        # Use the latent embeddings for classification
-        x = embeddings  # Shape: [batch_size, latent_dim]
-        x = self.head(x)
-        return x
-
-def phileo_precursor(checkpoint, output_dim=1, freeze_body=True, classifier=False, **kwargs):
-    if classifier:
-        model = FoundationClassifier(checkpoint=checkpoint, output_dim=output_dim, **kwargs)
-        if freeze_body:
-            for param in model.model.encoder.parameters():
-                param.requires_grad = False
-    else:
-        model = Foundation(output_dim=output_dim, **kwargs)
-        # Load the checkpoint
-        state_dict = torch.load(checkpoint)
-        model.load_state_dict(state_dict)
-        if freeze_body:
-            for param in model.encoder.parameters():
-                param.requires_grad = False
-    return model
-
-
+        out = self.model(x)
+        return out
 
 
 

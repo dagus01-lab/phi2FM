@@ -127,8 +127,9 @@ class PhiSatNetDownstream(nn.Module):
 
     def _load_pretrained(self, pretrained_path):
         """
-        Loads the pretrained weights (from a .pt file) into the stem and encoder.
-        Handles the case when the keys are prefixed with "module." (due to training with DP/DDP).
+        Loads the pretrained weights (from a .pt file) into the stem, encoder,
+        and (if applicable) bridge and decoder. Handles the case when the keys are
+        prefixed with "module." (due to training with DP/DDP).
         """
         checkpoint = torch.load(pretrained_path, map_location="cpu")
         
@@ -138,9 +139,7 @@ class PhiSatNetDownstream(nn.Module):
         # Remove "module." prefix if it exists.
         new_state_dict = {}
         for key, value in state_dict.items():
-            new_key = key
-            if key.startswith("module."):
-                new_key = key[len("module."):]
+            new_key = key[len("module."): ] if key.startswith("module.") else key
             new_state_dict[new_key] = value
 
         # Load stem weights.
@@ -164,6 +163,32 @@ class PhiSatNetDownstream(nn.Module):
             warnings.warn(f"The following keys were not found in the pretrained encoder: {missing}")
         if unexpected:
             warnings.warn(f"The following unexpected keys in pretrained encoder were ignored: {unexpected}")
+
+        # If task is segmentation, also load bridge and decoder weights.
+        if self.task == "segmentation":
+            # Load bridge weights.
+            if self.bridge is not None:
+                bridge_state = {
+                    key[len("bridge."):]: value
+                    for key, value in new_state_dict.items() if key.startswith("bridge.")
+                }
+                missing, unexpected = self.bridge.load_state_dict(bridge_state, strict=False)
+                if missing:
+                    warnings.warn(f"The following keys were not found in the pretrained bridge: {missing}")
+                if unexpected:
+                    warnings.warn(f"The following unexpected keys in pretrained bridge were ignored: {unexpected}")
+
+            # Load decoder weights.
+            if self.decoder is not None:
+                decoder_state = {
+                    key[len("decoder."):]: value
+                    for key, value in new_state_dict.items() if key.startswith("decoder.")
+                }
+                missing, unexpected = self.decoder.load_state_dict(decoder_state, strict=False)
+                if missing:
+                    warnings.warn(f"The following keys were not found in the pretrained decoder: {missing}")
+                if unexpected:
+                    warnings.warn(f"The following unexpected keys in pretrained decoder were ignored: {unexpected}")
 
     def forward(self, x):
         """
