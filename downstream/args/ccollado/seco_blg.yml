@@ -1,9 +1,9 @@
 
-experiment_name: nshot_phi2/phi2_prithvi
+experiment_name: nshot_phi2/phi2_seasonal_contrast
 downstream_task: building
-model_name: prithvi
+model_name: seasonal_contrast
 augmentations: True
-batch_size: 48
+batch_size: 64
 model_device: cuda
 generator_device: cuda
 num_workers: 16
@@ -22,7 +22,7 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/pretrained_models/Prithvi_100M.pt # **********************************
+pretrained_model_path: /home/ccollado/pretrained_weights/seco_resnet50_1m.ckpt
 freeze_pretrained: True
 data_path_128_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
 data_path_224_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/

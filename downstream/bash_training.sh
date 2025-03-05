@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# Define the list of configuration files
+configs=(
+    "args/ccollado/moco.yml"
+    "args/ccollado/dino.yml"
+    "args/ccollado/seco.yml"
+    "args/ccollado/geoaware_lc.yml"
+    "args/ccollado/prithvi_lc.yml"
+    "args/ccollado/satmae_lc.yml"
+    "args/ccollado/uniphi_lc.yml"
+    "args/ccollado/vit_lc.yml"
+)
+
+# Loop through each config file and execute the training script sequentially
+for config in "${configs[@]}"; do
+    echo "Running training with config: $config"
+    python training_script.py -r "$config"
+    if [ $? -ne 0 ]; then
+        echo "Error encountered in training with $config. Exiting."
+        exit 1
+    fi
+    echo "Finished training with config: $config"
+done
+
+echo "All training scripts completed successfully."

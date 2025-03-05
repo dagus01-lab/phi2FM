@@ -402,7 +402,18 @@ def load_data(x_train, y_train, x_val, y_val, x_test, y_test, x_inference, y_inf
     ds_test = beo.Dataset(x_test, y_test, callback=cb_decoder)
     ds_val = beo.Dataset(x_val, y_val, callback=cb_decoder)
     ds_inference = beo.Dataset(x_inference, y_inference, callback=cb_decoder)
-    
+
+    # For debugging
+    if True:
+        from torch.utils.data import Subset
+        test_size = int(0.05 * len(ds_test))
+        print(f"Initial test size: {len(ds_test)}")
+        indices = np.random.choice(len(ds_test), test_size, replace=False)
+        ds_test = Subset(ds_test, indices)
+        ds_inference = Subset(ds_inference, indices)
+        print(f"Test size: {len(ds_test)}")
+        print("WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING")
+
     # import pdb; pdb.set_trace()
 
     dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=num_workers,

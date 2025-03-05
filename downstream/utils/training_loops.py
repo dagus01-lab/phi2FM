@@ -774,55 +774,117 @@ class TrainLandCover(TrainBase):
                                channel_first=True, vmin=0, save_path=f"{self.out_folder}/{name}.png")
 
     def get_metrics(self, images=None, labels=None, running_metric=None, k=None):
-        
+        # When a confusion matrix is provided, compute the metrics
         if (running_metric is not None) and (k is not None):
-            metric_names = ['acc','precision','recall','baseline_mse']
-            # intermediary_values = ['confusion_matrix']
-
-            confmat = running_metric
-
-            total_pixels = np.sum(confmat)
             
+            confmat = running_metric
+            
+            # Total number of pixels
+            total_pixels = np.sum(confmat)
+
+            # True positives (TP) per class
             tp_per_class = np.diagonal(confmat)
             total_tp = tp_per_class.sum()
 
+            # False positives (FP) and false negatives (FN) per class
             fp_per_class = confmat.sum(axis=0) - tp_per_class
             fn_per_class = confmat.sum(axis=1) - tp_per_class
 
-            precision_per_class = tp_per_class/(fp_per_class+tp_per_class)
-            recall_per_class = tp_per_class/(fn_per_class+tp_per_class)
+            # Precision and recall for each class
+            precision_per_class = tp_per_class / (fp_per_class + tp_per_class + 1e-12)
+            recall_per_class    = tp_per_class / (fn_per_class + tp_per_class + 1e-12)
 
-            precision_micro = total_tp/(fp_per_class.sum() + total_tp)
-            recall_micro = total_tp/(fn_per_class.sum() + total_tp)
+            # Micro-level precision and recall
+            precision_micro = total_tp / (fp_per_class.sum() + total_tp + 1e-12)
+            recall_micro    = total_tp / (fn_per_class.sum() + total_tp + 1e-12)
+
+            # Macro-level precision and recall (simple mean)
             precision_macro = np.mean(precision_per_class)
-            recall_macro = np.mean(recall_per_class)
+            recall_macro    = np.mean(recall_per_class)
 
-            acc_total = total_tp/total_pixels
+            # Accuracy across all pixels
+            acc_total = total_tp / (total_pixels + 1e-12)
 
-            final_metrics = {'acc':acc_total, 'precision_per_class':precision_per_class.tolist(),'recall_per_class':recall_per_class.tolist() ,'precision_micro':precision_micro, 'precision_macro':precision_macro, 'recall_micro':recall_micro, 'recall_macro':recall_macro, 'conf_mat':confmat.tolist()}
+            # -----------------------------
+            #  Compute F1-scores
+            # -----------------------------
+            # Per-class F1
+            f1_per_class = 2 * (precision_per_class * recall_per_class) / (
+                precision_per_class + recall_per_class + 1e-12
+            )
+            # Macro-F1 (average F1 across classes)
+            f1_macro = np.mean(f1_per_class)
+            # Micro-F1 (global precision & recall)
+            f1_micro = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + 1e-12)
+
+            # -----------------------------
+            #  Compute MCC (Matthews Correlation Coefficient)
+            # -----------------------------
+            # For each class, treating it as a one-vs-all problem:
+            tn_per_class = total_pixels - (tp_per_class + fp_per_class + fn_per_class)
+            mcc_per_class = (tp_per_class * tn_per_class - fp_per_class * fn_per_class) / (
+                np.sqrt((tp_per_class + fp_per_class) * (tp_per_class + fn_per_class) *
+                        (tn_per_class + fp_per_class) * (tn_per_class + fn_per_class)) + 1e-12
+            )
+
+            # Macro-average MCC: simple mean of per-class MCCs
+            mcc_macro = np.mean(mcc_per_class)
+            # Weighted-average MCC: weight each class by its support (total true pixels for that class)
+            support = confmat.sum(axis=1)  # true occurrences per class
+            mcc_weighted = np.sum(mcc_per_class * support) / (support.sum() + 1e-12)
+
+            # Micro-average MCC: computed using the multi-class MCC formula
+            # c = sum(diagonal) and s = total samples
+            s = total_pixels
+            c = total_tp
+            p = confmat.sum(axis=0)  # predicted totals per class
+            t = confmat.sum(axis=1)  # true totals per class
+            mcc_micro = (c * s - np.sum(p * t)) / (np.sqrt((s**2 - np.sum(p**2)) * (s**2 - np.sum(t**2))) + 1e-12)
+
+            # -----------------------------
+            #  Collate final metrics
+            # -----------------------------
+            final_metrics = {
+                'acc': acc_total,
+                'precision_per_class': precision_per_class.tolist(),
+                'recall_per_class': recall_per_class.tolist(),
+                'precision_micro': precision_micro,
+                'precision_macro': precision_macro,
+                'recall_micro': recall_micro,
+                'recall_macro': recall_macro,
+                'f1_per_class': f1_per_class.tolist(),
+                'f1_micro': f1_micro,
+                'f1_macro': f1_macro,
+                'mcc_per_class': mcc_per_class.tolist(),
+                'mcc_macro': mcc_macro,
+                'mcc_weighted': mcc_weighted,
+                'mcc_micro': mcc_micro,
+                'conf_mat': confmat.tolist()
+            }
 
             return final_metrics
 
-
-        elif (images == None) and (labels == None):
-            intermediary_values = ['confusion_matrix']
+        # If no images/labels are passed, just initialize the confusion matrix
+        elif (images is None) and (labels is None):
             num_classes = len(config_lc.lc_raw_classes.keys())
-            metric_init = np.zeros((num_classes,num_classes)) # 
-            return  metric_init
-        
-        
+            metric_init = np.zeros((num_classes, num_classes))
+            return metric_init
+
+        # Otherwise, compute the confusion matrix from model predictions
         else:
             outputs = self.model(images)
             outputs = outputs.argmax(axis=1).flatten()
             labels = labels.squeeze().flatten()
-            
-            # stolen from pytorch confusion matrix
+
             num_classes = len(config_lc.lc_raw_classes.keys())
             unique_mapping = labels.to(torch.long) * num_classes + outputs.to(torch.long)
-            bins = torch.bincount(unique_mapping, minlength=num_classes**2) 
+            bins = torch.bincount(unique_mapping, minlength=num_classes**2)
             cfm = bins.reshape(num_classes, num_classes)
 
             return cfm.cpu().numpy()
+
+
+
 
 class TrainClassificationBuildings(TrainBase):
 
@@ -845,69 +907,181 @@ class TrainClassificationBuildings(TrainBase):
                                               save_path=f"{self.out_folder}/{name}.png")
 
     def get_metrics(self, images=None, labels=None, running_metric=None, k=None):
-        
+        """
+        Multi-label version of get_metrics.
+
+        We store a confusion matrix of shape (num_classes, 2, 2), i.e., each class
+        has its own 2×2 submatrix:
+
+            [0, 0] -> TN
+            [0, 1] -> FP
+            [1, 0] -> FN
+            [1, 1] -> TP
+
+        The code structure mirrors the original function:
+          - If running_metric and k are provided: compute final metrics from the aggregated CM
+          - If images and labels are both None: return an initialized CM
+          - Otherwise: return the per-batch CM for the current images/labels
+        """
+
+        # ------------------------------------------------------------------
+        # CASE 1: FINAL METRICS
+        # ------------------------------------------------------------------
         if (running_metric is not None) and (k is not None):
-            # For the aggregated branch we assume that running_metric[4:7] contain the global TP, FP, FN.
-            tp_global = running_metric[4]
-            fp_global = running_metric[5]
-            fn_global = running_metric[6]
-            
-            precision_micro = tp_global / (tp_global + fp_global + 1e-8)
-            recall_micro    = tp_global / (tp_global + fn_global + 1e-8)
-            f1_micro        = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + 1e-8)
-            
-            
+            # running_metric is our accumulated confusion matrix
+            # Shape: (num_classes, 2, 2)
+            confmat = running_metric
+            num_classes = confmat.shape[0]
+
+            # Extract per-class TP/FP/FN/TN
+            # Indices: [actual, predicted]
+            # confmat[i, 1, 1] = TP for class i
+            # confmat[i, 0, 1] = FP
+            # confmat[i, 1, 0] = FN
+            # confmat[i, 0, 0] = TN
+            tp_per_class = confmat[:, 1, 1]
+            fp_per_class = confmat[:, 0, 1]
+            fn_per_class = confmat[:, 1, 0]
+            tn_per_class = confmat[:, 0, 0]
+
+            # ---------------------------------------
+            #  Compute per-class precision & recall
+            # ---------------------------------------
+            precision_per_class = tp_per_class / (tp_per_class + fp_per_class + 1e-12)
+            recall_per_class    = tp_per_class / (tp_per_class + fn_per_class + 1e-12)
+
+            # ---------------------------------------
+            #  Compute micro precision & recall
+            #     (sum over classes => treat as single binary problem)
+            # ---------------------------------------
+            sum_tp = tp_per_class.sum()
+            sum_fp = fp_per_class.sum()
+            sum_fn = fn_per_class.sum()
+            sum_tn = tn_per_class.sum()
+
+            precision_micro = sum_tp / (sum_tp + sum_fp + 1e-12)
+            recall_micro    = sum_tp / (sum_tp + sum_fn + 1e-12)
+
+            # ---------------------------------------
+            #  Macro precision & recall
+            # ---------------------------------------
+            precision_macro = precision_per_class.mean()
+            recall_macro    = recall_per_class.mean()
+
+            # ---------------------------------------
+            #  Overall accuracy
+            #     = (TP + TN) / total
+            # ---------------------------------------
+            total_predictions = confmat.sum()  # sum of all 2×2 submatrices
+            acc_total = (sum_tp + sum_tn) / (total_predictions + 1e-12)
+
+            # ---------------------------------------
+            #  F1-scores
+            # ---------------------------------------
+            # Per-class F1
+            f1_per_class = 2 * (precision_per_class * recall_per_class) / (
+                precision_per_class + recall_per_class + 1e-12
+            )
+            f1_macro = f1_per_class.mean()
+
+            # Micro-F1
+            f1_micro = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + 1e-12)
+
+            # ---------------------------------------
+            #  MCC (Matthews Correlation Coefficient)
+            # ---------------------------------------
+            # Per class
+            mcc_per_class = (
+                (tp_per_class * tn_per_class) - (fp_per_class * fn_per_class)
+            ) / (
+                np.sqrt(
+                    (tp_per_class + fp_per_class)
+                    * (tp_per_class + fn_per_class)
+                    * (tn_per_class + fp_per_class)
+                    * (tn_per_class + fn_per_class)
+                ) + 1e-12
+            )
+            mcc_macro = mcc_per_class.mean()
+
+            # Weighted-average MCC (by class support)
+            support = tp_per_class + fn_per_class  # total actual positives for each class
+            mcc_weighted = np.sum(mcc_per_class * support) / (support.sum() + 1e-12)
+
+            # Micro-average MCC
+            # Standard multi-label micro-MCC formula using the sums:
+            numerator = (sum_tp * sum_tn) - (sum_fp * sum_fn)
+            denominator = np.sqrt(
+                (sum_tp + sum_fp)
+                * (sum_tp + sum_fn)
+                * (sum_tn + sum_fp)
+                * (sum_tn + sum_fn)
+            ) + 1e-12
+            mcc_micro = numerator / denominator
+
+            # ---------------------------------------
+            #  Collate final metrics
+            # ---------------------------------------
             final_metrics = {
-                'mse': running_metric[0] / (k + 1),
-                'mae': running_metric[1] / (k + 1),
-                'mave': running_metric[2] / (k + 1),
-                'acc': running_metric[3] / (k + 1), # this is actually Hamming loss if multi-label classfication
-                'precision_micro': precision_micro,
-                'recall_micro': recall_micro,
-                'f1_micro': f1_micro,
-                'baseline_mse': running_metric[7] / (k + 1)
+                'acc': acc_total,
+                'precision_per_class': precision_per_class.tolist(),
+                'recall_per_class': recall_per_class.tolist(),
+                'precision_micro': float(precision_micro),
+                'precision_macro': float(precision_macro),
+                'recall_micro': float(recall_micro),
+                'recall_macro': float(recall_macro),
+                'f1_per_class': f1_per_class.tolist(),
+                'f1_micro': float(f1_micro),
+                'f1_macro': float(f1_macro),
+                'mcc_per_class': mcc_per_class.tolist(),
+                'mcc_macro': float(mcc_macro),
+                'mcc_weighted': float(mcc_weighted),
+                'mcc_micro': float(mcc_micro),
+                'conf_mat': confmat.tolist(),  # shape: (num_classes, 2, 2)
             }
+
             return final_metrics
 
+        # ------------------------------------------------------------------
+        # CASE 2: RETURN AN INITIAL (ZEROS) CONF MAT
+        # ------------------------------------------------------------------
         elif (images is None) and (labels is None):
-            intermediary_values = ['mse', 'mae', 'mave', 'acc', 'tp_micro', 'fp_micro', 'fn_micro', 'baseline_mse', 'f1_micro']
-            metric_init = np.zeros(len(intermediary_values))
+            # Suppose we know the number of classes in some config or otherwise
+            num_classes = 11  # or len(config_lc.lc_raw_classes.keys())
+            metric_init = np.zeros((num_classes, 2, 2), dtype=np.float32)
             return metric_init
 
+        # ------------------------------------------------------------------
+        # CASE 3: COMPUTE A PER-BATCH CONF MAT
+        # ------------------------------------------------------------------
         else:
-            outputs = self.model(images)
-            
-            # ----- Regression Metrics -----
-            error = outputs - labels
-            squared_error = error ** 2
-            test_mse  = squared_error.mean().item()
-            test_mae  = error.abs().mean().item()
-            test_mave = torch.mean(torch.abs(outputs.mean(dim=1) - labels.mean(dim=1))).item()
-
-            # ----- Classification Metrics -----
+            # Model forward
+            outputs = self.model(images)  # shape: (batch_size, num_classes)
+            # Convert logits to binary predictions
             threshold = 0.5
-            # Convert to binary predictions/labels.
-            label_classification  = (labels > threshold).int()  # Shape: (batch_size, num_classes)
-            output_classification = (outputs > threshold).int()  # Shape: (batch_size, num_classes)
-            
-            # --- Micro F1 ---
-            # Compute overall true positives, false positives, and false negatives.
-            tp_micro = ((output_classification == 1) & (label_classification == 1)).sum().item()
-            fp_micro = ((output_classification == 1) & (label_classification == 0)).sum().item()
-            fn_micro = ((output_classification == 0) & (label_classification == 1)).sum().item()
-            precision_micro = tp_micro / (tp_micro + fp_micro + 1e-8)
-            recall_micro    = tp_micro / (tp_micro + fn_micro + 1e-8)
-            f1_micro        = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + 1e-8)
-            
-            # Compute overall accuracy.
-            test_accuracy = (label_classification == output_classification).float().mean().item()
-            test_zero_model_mse = (labels ** 2).mean().item()
-            
-            # Return metrics as a NumPy array.
-            # Order: mse, mae, mave, acc, tp_micro, fp_micro, fn_micro, baseline_mse, f1_micro, f1_macro
-            return np.array([test_mse, test_mae, test_mave, test_accuracy,
-                            tp_micro, fp_micro, fn_micro, test_zero_model_mse,
-                            f1_micro])
+            pred = (outputs > threshold).int()  # (batch_size, num_classes)
+            true = labels.int()                 # (batch_size, num_classes)
+
+            # Compute confusion matrix for each class
+            batch_size, num_classes = true.shape
+            cfm = torch.zeros(num_classes, 2, 2, device=self.device, dtype=torch.float)
+
+            # Vectorized counts for each class:
+            #   TP = (pred == 1 & true == 1)
+            #   FP = (pred == 1 & true == 0)
+            #   FN = (pred == 0 & true == 1)
+            #   TN = (pred == 0 & true == 0)
+            tp = (pred * true).sum(dim=0)  # shape: (num_classes,)
+            fp = (pred * (1 - true)).sum(dim=0)
+            fn = ((1 - pred) * true).sum(dim=0)
+            tn = ((1 - pred) * (1 - true)).sum(dim=0)
+
+            # Assign into cfm[i, ...]
+            cfm[:, 1, 1] = tp
+            cfm[:, 0, 1] = fp
+            cfm[:, 1, 0] = fn
+            cfm[:, 0, 0] = tn
+
+            return cfm.cpu().numpy()
 
 
 

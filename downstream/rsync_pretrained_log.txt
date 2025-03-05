@@ -1,10 +1,0 @@
-nohup: ignoring input
-sending incremental file list
-pretrained_weights/
-pretrained_weights/CoreEncoderMultiHead_geo_pred_best.pt
-         32,768   0%    0.00kB/s    0:00:00       69,854,038 100%  504.45MB/s    0:00:00 (xfr#1, to-chk=1/3)
-pretrained_weights/phileo-precursor_v09_e013.pt
-         32,768   0%  240.60kB/s    0:12:07      174,953,690 100%  193.34MB/s    0:00:00 (xfr#2, to-chk=0/3)
-
-sent 244,867,766 bytes  received 58 bytes  97,947,129.60 bytes/sec
-total size is 244,807,728  speedup is 1.00

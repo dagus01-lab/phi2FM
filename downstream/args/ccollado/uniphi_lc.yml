@@ -34,5 +34,5 @@ data_path_inference_224: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
 output_path: /home/ccollado/2_phileo_fm/models
 data_parallel: False
 device_ids: [0]
-pad_to_10_bands: True # required for models trained with 10 bands (all but phisatnet)
+pad_bands: 10 # 10 for all models, None for phisatnet, 13 for moco and dino
 only_get_datasets: False

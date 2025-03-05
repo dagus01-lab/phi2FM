@@ -76,7 +76,7 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
                            'vit_cnn_classifier', 'prithvi_classifier', 'vit_cnn_wSkip', 'vit_cnn_gc_wSkip']
 
-MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier']
+MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier', 'moco', 'moco_classifier', 'dino', 'dino_classifier']
 MODELS_224_r30 = ['prithvi', 'prithvi_classifier']
 
 MODEL_LIST = CNN_LIST + MIXER_LIST + VIT_LIST + CNN_PRETRAINED_LIST + VIT_CNN_LIST + VIT_CNN_PRETRAINED_LIST
@@ -652,6 +652,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     OUTPUT_FOLDER = os.path.join(
         output_path,
         experiment_name,
+        downstream_task,
         f"{current_date}_{NAME}_{split_string}"
     )
 
@@ -833,7 +834,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # 6. Training / testing / inference workflow
     # -----------------------------------------------------------------------
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     
     if train_mode == 'train_test_inference':
         trainer.train()
@@ -919,26 +920,23 @@ if __name__ == "__main__":
 
     # 2. Run main function
     if True:
+        n_shot_list = [0, 50]
         # n_shot_list = [0, 50, 100, 500, 1000, 5000]
-        n_shot_list = [0, 50, 100, 500, 1000, 5000]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
             for freeze_pretrained in [True, False]:
                 args.freeze_pretrained = freeze_pretrained
                 if n_shot == 0 and not freeze_pretrained:
                     continue
-                for downstream_task in ['']:
+                # for downstream_task in ['']:
                 # for downstream_task in ['_classification']:
-                # for downstream_task in ['', '_classification']:
-                    args.downstream_task = args.downstream_task + downstream_task
+                for downstream_task in ['lc', 'lc_classification', 'building']:
+                    args.downstream_task = downstream_task
+                    args.output_channels = 1 if 'building' in args.downstream_task else 11
                     args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
                 
                     print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")
                     main(**vars(args))
-                    
-                    # Remove classification if added
-                    args.downstream_task = args.downstream_task.replace('_classification', '')
-                    args.model_name = args.model_name.replace('_classifier', '')
 
     else:
         main(**vars(args))
