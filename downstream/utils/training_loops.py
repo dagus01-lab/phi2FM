@@ -211,9 +211,16 @@ class TrainBase():
             return  metric_init
         
         
-        else:
-            
+        else:            
             outputs = self.model(images)
+
+            assert outputs.shape == labels.shape, (
+                f"Shape mismatch in get_metrics:\n"
+                f" - outputs shape: {outputs.shape}\n"
+                f" - labels shape: {labels.shape}\n"
+                f"Check model output dimensions and label preprocessing."
+            )
+
             # regression metrics
             error = outputs - labels
             squared_error = error**2
