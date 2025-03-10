@@ -32,7 +32,7 @@ downstream_model_path: null
 data_path_inference_128: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_224/
 data_path_inference_224: /home/phimultigpu/phileo_NFS/phileo_data/phisat2_fm/phileo-bench/np_patches_224/
 output_path: /home/phimultigpu/phisat2_foundation/models_phileobench
-data_parallel: DP
+data_parallel: DDP
 device_ids: [0, 1, 2, 3]
 pad_bands: null # 10 for all models, None for phisatnet, 13 for moco and dino
 only_get_datasets: False
