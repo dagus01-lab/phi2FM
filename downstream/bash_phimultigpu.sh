@@ -3,13 +3,13 @@
 # Define the list of configuration files
 configs=(
     "args/phimultigpu/moco.yml"
-    "args/phimultigpu/dino.yml"
-    "args/phimultigpu/seco.yml"
-    "args/phimultigpu/geoaware.yml"
-    "args/phimultigpu/prithvi.yml"
-    "args/phimultigpu/satmae.yml"
-    "args/phimultigpu/uniphi.yml"
-    "args/phimultigpu/vit.yml"
+    # "args/phimultigpu/dino.yml"
+    # "args/phimultigpu/seco.yml"
+    # "args/phimultigpu/geoaware.yml"
+    # "args/phimultigpu/prithvi.yml"
+    # "args/phimultigpu/satmae.yml"
+    # "args/phimultigpu/uniphi.yml"
+    # "args/phimultigpu/vit.yml"
 )
 
 # Loop through each config file and execute the training script sequentially
