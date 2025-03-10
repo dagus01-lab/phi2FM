@@ -404,7 +404,7 @@ def load_data(x_train, y_train, x_val, y_val, x_test, y_test, x_inference, y_inf
     ds_inference = beo.Dataset(x_inference, y_inference, callback=cb_decoder)
 
     # For debugging
-    if True:
+    if False:
         from torch.utils.data import Subset
         test_size = int(0.05 * len(ds_test))
         print(f"Initial test size: {len(ds_test)}")

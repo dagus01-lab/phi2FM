@@ -8,7 +8,7 @@ model_device: cuda
 generator_device: cuda
 num_workers: 16
 early_stop: 15
-epochs: 500
+epochs: 200
 input_channels: 10
 output_channels: 11
 input_size: 224
@@ -31,7 +31,7 @@ train_mode: train_test                      # train_test, train_test_inference, 
 downstream_model_path: null
 data_path_inference_128: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
 data_path_inference_224: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
-output_path: /home/ccollado/2_phileo_fm/models
+output_path: /home/ccollado/models
 data_parallel: False
 device_ids: [0]
 pad_bands: 10 # 10 for all models, None for phisatnet, 13 for moco and dino
