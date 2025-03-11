@@ -1,5 +1,9 @@
 # 3. Model Benchmarking - Downstream Tasks
 
+Example of how to run:
+
+`python training_script.py -r args/phimultigpu/dino.yml`
+
 ## Changes I did to PhilEO-Bench
 - Land cover classification is now multi-label land cover classification
 - When doing few-shot, ensure the distribution of values is the same for every possibl n-shot, while still balancing the data as much as possible (e.g. if almost no patches contain buildings, no much learning will occur. What I changed is maximizing building in patches to encourage learning while keeping the same distribution in the amount of buildings for every n-shot).
@@ -9,6 +13,9 @@
 Contains the architecture of different models tested. Right now, it has the architectures (both in segmentation and classification) for:
 - Prithvi 1.0
 - SatMAE
+- SeCo
+- Moco (ssl4eo-s12)
+- DINO (ssl4eo-s12)
 - A pretrained U-Net (GeoAware)
 - Another pretrained U-Net (uniphi)
 - A pretrained ViT

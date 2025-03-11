@@ -9,7 +9,7 @@ from downstream.models.phisatnet_downstream import PhiSatNetDownstream
 # === Parse command-line arguments ===
 def parse_args():
     parser = argparse.ArgumentParser(description="Script to test memory usage and ONNX conversion.")
-    parser.add_argument("-s", "--save_to_onnx", type=str, default="True",
+    parser.add_argument("-s", "--save_to_onnx", type=str, default="False",
                         help="Whether to save to ONNX (True/False).")
     parser.add_argument("-m", "--model_size", type=str, default="nano",
                         help="Model size, e.g. nano, mini, tiny, small, light, base.")
@@ -45,7 +45,7 @@ def main():
 
     # Load the model with the specified size
     core_kwargs = get_phisat2_model(model_size=model_size, unet_type='geoaware')
-        model = PhiSatNetDownstream(pretrained_path=None, 
+    model = PhiSatNetDownstream(pretrained_path=None, 
                                      task=task,
                                      input_dim=8,
                                      output_dim=8,
@@ -137,11 +137,11 @@ def main():
     from tabulate import tabulate
 
     # Define the headers and the data rows
-    headers = ["Description", "Memory Usage (MB)"]
+    headers = ["Description", "Memory (MB)"]
     data = [
         ["Model Size", model_size],
-        ["Peak Memory Usage", peak_memory_usage / 1024**2],
-        ["Memory Usage During Inference", memory_usage / 1024**2],
+        ["Peak Memory Usage for Inference", peak_memory_usage / 1024**2],
+        # ["Memory Usage During Inference", memory_usage / 1024**2],
         ["Memory for Model Parameters", memory_before / 1024**2]
     ]
 

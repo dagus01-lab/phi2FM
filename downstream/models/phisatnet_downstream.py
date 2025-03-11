@@ -76,7 +76,8 @@ class PhiSatNetDownstream(nn.Module):
         )
 
         # Load the pretrained weights.
-        self._load_pretrained(pretrained_path)
+        if pretrained_path is not None:
+            self._load_pretrained(pretrained_path)
 
         # (Optional) Freeze stem and encoder.
         if freeze_body:
