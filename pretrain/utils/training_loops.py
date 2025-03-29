@@ -868,7 +868,7 @@ class TrainFoundation(TrainBase):
         return loss, log_loss
 
 
-    def estimate_initial_losses(self, model, loss_fn, dataloader, device, num_batches=10):
+    def estimate_initial_losses(self, model, loss_fn, dataloader, device, num_batches=None):
         """
         Runs a few batches from 'dataloader' to compute average losses
         for each task, with a progress bar.
@@ -1218,7 +1218,7 @@ class TrainFoundation(TrainBase):
         # ) as prof:
         
         
-        self.remove_log_layer()
+        # self.remove_log_layer()
         
         if True:
 
@@ -1360,7 +1360,7 @@ class TrainFoundation(TrainBase):
 
 
     def v_loop(self, epoch):
-        self.log_layer()
+        # self.log_layer()
         # Initialize the progress bar
 
         if self.is_main_process:
