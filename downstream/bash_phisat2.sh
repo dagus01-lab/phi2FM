@@ -2,20 +2,20 @@
 
 # Define the list of configuration files
 configs=(
-    # "args/ccollado/geoaware.yml"
-    # "args/ccollado/prithvi.yml"
-    # "args/ccollado/satmae.yml"
-    # "args/ccollado/moco.yml"
-    # "args/ccollado/dino.yml"
-    "args/ccollado/seco.yml"
-    "args/ccollado/uniphi.yml"
-    "args/ccollado/vit.yml"
+    "args/phisat2/geoaware.yml"
+    "args/phisat2/prithvi.yml"
+    "args/phisat2/satmae.yml"
+    "args/phisat2/moco.yml"
+    "args/phisat2/dino.yml"
+    "args/phisat2/seco.yml"
+    "args/phisat2/uniphi.yml"
+    "args/phisat2/vit.yml"
 )
 
 # Loop through each config file and execute the training script sequentially
 for config in "${configs[@]}"; do
     echo "Running training with config: $config"
-    python training_script.py -r "$config"
+    python roads_training_script.py -r "$config"
     if [ $? -ne 0 ]; then
         echo "Error encountered in training with $config. Exiting."
         exit 1

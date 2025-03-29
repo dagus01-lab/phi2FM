@@ -22,16 +22,16 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/pretrained_models/SatMAE_pretrain-vit-large-e199.pth # **********************************
+pretrained_model_path: /home/phisat2/phisat2_foundation/phisat2_fm/pretrained_weights/SatMAE_pretrain-vit-large-e199.pth
 freeze_pretrained: True
-data_path_128_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
-data_path_224_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
-data_path_224_30m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
+data_path_128_10m: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_128/
+data_path_224_10m: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_224/
+data_path_224_30m: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_224/
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
 downstream_model_path: null
-data_path_inference_128: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
-data_path_inference_224: /home/ccollado/phileo_phisat2/L1C/np_patches_224/
-output_path: /home/ccollado/models
+data_path_inference_128: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_128/
+data_path_inference_224: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_224/
+output_path: /home/phisat2/models
 data_parallel: False
 device_ids: [0]
 pad_bands: 10 # 10 for all models, None for phisatnet, 13 for moco and dino
