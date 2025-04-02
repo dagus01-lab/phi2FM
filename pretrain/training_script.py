@@ -208,7 +208,7 @@ def main(
 
     # Print model summary and module sizes
     if world_rank == 0:
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         model_summary = summary(model, input_size=(batch_size, input_channels, input_size, input_size))
         if model_device == 'cpu':
             model.to(model_device)
