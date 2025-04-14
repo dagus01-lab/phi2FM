@@ -70,13 +70,15 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        'GeoAware_core_nano_classifier', 'GeoAware_contrastive_core_nano_classifier',
                        'GeoAware_mh_pred_core_nano_classifier', 'seasonal_contrast_classifier',
                        'phileo_precursor', 'phileo_precursor_classifier', 'phisatnet', 'phisatnet_classifier',
-                       'moco', 'moco_classifier', 'dino', 'dino_classifier',
+                       'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier',
+                       'caco', 'caco_classifier'
                        ]
 
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
                            'vit_cnn_classifier', 'prithvi_classifier', 'vit_cnn_wSkip', 'vit_cnn_gc_wSkip']
 
-MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier', 'moco', 'moco_classifier', 'dino', 'dino_classifier']
+MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier', 
+              'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier', 'caco', 'caco_classifier']
 MODELS_224_r30 = ['prithvi', 'prithvi_classifier']
 
 MODEL_LIST = CNN_LIST + MIXER_LIST + VIT_LIST + CNN_PRETRAINED_LIST + VIT_CNN_LIST + VIT_CNN_PRETRAINED_LIST
@@ -392,12 +394,28 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
     
     elif model_name == 'moco':
         resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
-        return moco_resnet(path_model_weights, classifier=False, **resnet_kwargs)
+        return moco_resnet(path_model_weights, classifier=False, bands=13, **resnet_kwargs)
     
     elif model_name == 'moco_classifier':
         resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
-        return moco_resnet(path_model_weights, classifier=True, **resnet_kwargs)
+        return moco_resnet(path_model_weights, classifier=True, bands=13, **resnet_kwargs)
+
+    elif model_name == 'gassl':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=False, bands=3, **resnet_kwargs)
     
+    elif model_name == 'gassl_classifier':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=True, bands=3, **resnet_kwargs)
+
+    elif model_name == 'caco':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=False, bands=4, **resnet_kwargs)
+
+    elif model_name == 'caco_classifier':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=True, bands=4, **resnet_kwargs)
+
     elif model_name == 'dino':
         resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
         return dino_resnet(path_model_weights, classifier=False, **resnet_kwargs)

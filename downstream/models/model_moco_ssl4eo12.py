@@ -3,10 +3,13 @@ import torch.nn as nn
 from torchvision.models import resnet50
 from models.model_DecoderUtils import CoreDecoder, DecoderBlock
 
-def load_moco_weights_to_base(ckpt_path):
+def load_moco_weights_to_base(ckpt_path, bands=13):
     # Load the MoCo checkpoint
     checkpoint = torch.load(ckpt_path, map_location="cpu")
-    state_dict = checkpoint["state_dict"]
+    if "state_dict" in checkpoint:
+        state_dict = checkpoint["state_dict"]
+    else:
+        state_dict = checkpoint  # It's already the raw state_dict
 
     # Create a new dictionary with keys stripped of the MoCo prefix.
     new_state_dict = {}
@@ -18,7 +21,7 @@ def load_moco_weights_to_base(ckpt_path):
 
     # Create a base resnet50 model without any pretrained weights.
     base_model = resnet50()
-    base_model.conv1 = torch.nn.Conv2d(13, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+    base_model.conv1 = torch.nn.Conv2d(bands, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
     # Load the new state dict into the base model.
     msg = base_model.load_state_dict(new_state_dict, strict=False)
     print("Base model load message:", msg)
@@ -27,10 +30,11 @@ def load_moco_weights_to_base(ckpt_path):
 
 class MocoRN50(nn.Module):
     def __init__(self, output_dim=1, path_model_weights=True, decoder_norm='batch', decoder_padding='same',
-                 decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280]):
+                 decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280],
+                 bands=13):
         super(MocoRN50, self).__init__()
         if path_model_weights:
-            self.encoder = load_moco_weights_to_base(path_model_weights)
+            self.encoder = load_moco_weights_to_base(path_model_weights, bands=bands)
 
         else:
             self.encoder = resnet50()
@@ -68,10 +72,10 @@ class MocoRN50(nn.Module):
 
 
 class MocoRN50_Classifier(nn.Module):
-    def __init__(self, output_dim=1, path_model_weights=True):
+    def __init__(self, output_dim=1, path_model_weights=True, bands=13):
         super(MocoRN50_Classifier, self).__init__()
         if path_model_weights:
-            self.encoder = load_moco_weights_to_base(path_model_weights)
+            self.encoder = load_moco_weights_to_base(path_model_weights, bands=bands)
 
         else:
             self.encoder = resnet50()
@@ -87,13 +91,13 @@ class MocoRN50_Classifier(nn.Module):
         x = self.classification_head(x)
         return x
 
-def moco_resnet(path_model_weights, output_dim=1, freeze_body=True, classifier=False, **kwargs):
+def moco_resnet(path_model_weights, output_dim=1, freeze_body=True, classifier=False, bands=13, **kwargs):
 
     if classifier:
-        model = MocoRN50_Classifier(output_dim=output_dim, path_model_weights=path_model_weights)
+        model = MocoRN50_Classifier(output_dim=output_dim, path_model_weights=path_model_weights, bands=bands)
         
     else:
-        model = MocoRN50(output_dim=output_dim, path_model_weights=path_model_weights, **kwargs)
+        model = MocoRN50(output_dim=output_dim, path_model_weights=path_model_weights, bands=bands, **kwargs)
 
     if freeze_body:
         for _, param in model.encoder.named_parameters():

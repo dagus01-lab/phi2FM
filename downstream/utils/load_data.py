@@ -92,6 +92,15 @@ def pad_bands(x):
             out[..., 6] = x[..., 6]  # B07
             # The remaining bands (B1, B8A, B9, B10, B11, B12) remain 0.
             x = out
+        
+        elif PROCESS_PHISAT == 3:
+            # RGB bands are B04, B03, B02
+            x = x[:, :, (2, 1, 0)]
+
+        elif PROCESS_PHISAT == 4:
+            # RGB bands are B04, B03, B02
+            x = x[:, :, (3, 2, 1, 0)]
+
     return x
 
 

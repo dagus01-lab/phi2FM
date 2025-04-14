@@ -2,9 +2,9 @@
 
 # Define the list of configuration files
 configs=(
-    "args/ccollado/geoaware.yml"
-    "args/ccollado/prithvi.yml"
-    "args/ccollado/satmae.yml"
+    # "args/ccollado/geoaware.yml"
+    # "args/ccollado/prithvi.yml"
+    # "args/ccollado/satmae.yml"
     "args/ccollado/moco.yml"
     "args/ccollado/dino.yml"
     "args/ccollado/seco.yml"
