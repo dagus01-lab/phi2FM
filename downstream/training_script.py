@@ -938,7 +938,7 @@ if __name__ == "__main__":
 
     # 2. Run main function
     if True:
-        n_shot_list = [5000]
+        n_shot_list = [0]
         # n_shot_list = [0, 50, 100, 500, 1000]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
@@ -947,7 +947,7 @@ if __name__ == "__main__":
                 if n_shot == 0 and not freeze_pretrained:
                     continue
                 # for downstream_task in ['building']:
-                for downstream_task in ['lc', 'lc_classification', 'building']:
+                for downstream_task in ['lc', 'lc_classification', 'building', 'roads']:
                     args.downstream_task = downstream_task
                     args.output_channels = 1 if 'building' in args.downstream_task else 11
                     args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
