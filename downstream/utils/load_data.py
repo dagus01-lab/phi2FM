@@ -316,6 +316,8 @@ def callback_decoder_geo(x, y):
 def callback_decoder_phisatnet(x, y):
     x, y = callback_preprocess_phisatnet(x, y)
     x, y = callback_postprocess_decoder(x, y)
+    
+    return x, y
 
 def callback_decoder_phisatnet_lc(x, y):
     x, y = callback_preprocess_phisatnet_lc(x, y)
