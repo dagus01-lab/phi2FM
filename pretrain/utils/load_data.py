@@ -89,7 +89,7 @@ class TransformX:
         # --- Data Pre-Processing ---
 
         # 1. Take sqrt of the image
-        x_np = np.sqrt(x_np)
+        x_np = np.sqrt(x_np) # IF NOT USING SQRT, NEED TO CHANGE THE MEANS, STD, MAX_SCALING, MIN_SCALING
 
         # 1. Clip the raw values to the valid range in the original domain (this will clip images to 10000 (100 because of sqrt))
         x_np = np.clip(x_np, self.min_scaling, self.max_scaling)
@@ -347,6 +347,13 @@ def load_foundation_data(lmdb_path_train, lmdb_path_val, lmdb_path_test, lmdb_pa
     # global_mean = np.array([1889.57135146, 1706.35570957, 1829.54409057, 1864.05266573, 2378.13355846, 1974.74770695, 2309.17435277, 2472.06254275])
     # global_std = np.array([1926.40004038, 1770.64430483, 2083.48230285, 1916.71983995, 2008.31424611, 2109.32162828, 2074.35633945, 2078.41143301])
 
+    # IF NO SQRT + CLIPPED TO 10000
+    # global_min = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
+    # global_max = np.array([10000., 10000., 10000., 10000., 10000., 10000., 10000., 10000.])
+    # global_mean = np.array([1884.56169544, 1701.8988641, 1818.49680678, 1856.58051233, 2364.33335501, 1961.68849886, 2294.99146283, 2457.69823862])
+    # global_std = np.array([1899.72067083, 1743.80445286, 2020.09785262, 1873.41863641, 1924.71680909, 2034.2549607, 1992.56097028, 1996.09805038])
+
+    # IF SQRT + CLIPPED TO 100
     global_min = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
     global_max = np.array([100., 100., 100., 100., 100., 100., 100., 100.])
     global_mean = np.array([39.91732045, 37.5492021, 37.54950869, 39.21091477, 44.2665634, 39.50358262, 43.62563718, 45.28759192])

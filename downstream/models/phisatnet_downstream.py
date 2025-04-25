@@ -75,29 +75,17 @@ class PhiSatNetDownstream(nn.Module):
             activation=self.activation,
         )
 
-        # Load the pretrained weights.
-        if pretrained_path is not None:
-            self._load_pretrained(pretrained_path)
-
-        # (Optional) Freeze stem and encoder.
-        if freeze_body:
-            for param in self.stem.parameters():
-                param.requires_grad = False
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-
         # ----------------------------------
         # 2) Build the downstream branch
         # ----------------------------------
         if self.task == "segmentation":
+            print("Loading segmentation model")
             # Bridge + Decoder + Head (no pretrained weights used here).
-            self.bridge = nn.Sequential(
-                CoreCNNBlock(
+            self.bridge = CoreCNNBlock(
                     in_channels=self.dims[-1],
                     out_channels=self.dims[-1],
                     norm=self.norm_downstream,
                     activation=self.activation,
-                )
             )
             self.decoder = FoundationDecoder(
                 depths=self.depths,
@@ -116,6 +104,7 @@ class PhiSatNetDownstream(nn.Module):
             )
         elif self.task == "classification":
             # Head (no pretrained weights used here).
+            print("Loading classification model")
             self.decoder = None
             self.bridge = None
             self.head = nn.Sequential(
@@ -125,6 +114,21 @@ class PhiSatNetDownstream(nn.Module):
             )
         else:
             raise ValueError(f"Task {self.task} not recognized. Must be either 'segmentation' or 'classification'.")
+
+        # ----------------------------------
+        # 3) Load the pretrained weights
+        # ----------------------------------
+        # Load the pretrained weights.
+        if pretrained_path is not None:
+            self._load_pretrained(pretrained_path)
+
+        # (Optional) Freeze stem and encoder.
+        if freeze_body:
+            for param in self.stem.parameters():
+                param.requires_grad = False
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+
 
     def _load_pretrained(self, pretrained_path):
         """
@@ -153,6 +157,8 @@ class PhiSatNetDownstream(nn.Module):
             warnings.warn(f"The following keys were not found in the pretrained stem: {missing}")
         if unexpected:
             warnings.warn(f"The following unexpected keys in pretrained stem were ignored: {unexpected}")
+        if not missing and not unexpected:
+            print("Stem weights loaded successfully. ALL MATCHED")
 
         # Load encoder weights.
         encoder_state = {

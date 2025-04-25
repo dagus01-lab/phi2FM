@@ -3,7 +3,7 @@ experiment_name: pretrain
 downstream_task: pretrain
 model_name: phisatnet_geoaware_nano
 augmentations: True
-batch_size: 24
+batch_size: 12
 model_device: cuda
 generator_device: cuda
 num_workers: 6
@@ -20,12 +20,12 @@ warmup: True
 warmup_steps: 5
 warmup_gamma: null
 min_lr: 0.000001
-data_path: /home/phimultigpu/phisat2_foundation/lmdb_patches_256_1536
+data_path: /home/ndionelis/data/lmdb_patches_256_1536
 train_mode: train_test
-output_path: /home/phimultigpu/phisat2_foundation/models
+output_path: /home/ndionelis/models
 data_parallel: DDP
-device_ids: [1]
+device_ids: [0]
 only_get_datasets: False
 fixed_task: null
-train_precision: amp
+train_precision: fp32
 val_precision: amp

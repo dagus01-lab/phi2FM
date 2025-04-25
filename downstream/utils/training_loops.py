@@ -25,6 +25,22 @@ import torch.distributed as dist
 from utils import visualize
 from utils import config_lc
 
+
+def convert_to_builtin_types(obj):
+    if isinstance(obj, dict):
+        return {k: convert_to_builtin_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_builtin_types(v) for v in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_to_builtin_types(v) for v in obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.generic):
+        return obj.item()
+    else:
+        return obj
+
+
 class TrainBase():
 
     def __init__(self, model: nn.Module, device: torch.device, train_loader: DataLoader, val_loader: DataLoader,
@@ -466,46 +482,53 @@ class TrainBase():
 
     def save_info(self, model_summary=None, n_shot=None, p_split=None, warmup=None, lr=None):
         print("Saving artifacts...")
-        artifacts = {'training_parameters': {'model': self.name,
-                                             'lr': lr,
-                                             'scheduler': self.lr_scheduler,
-                                             'warm_up': warmup,
-                                             'optimizer': str(self.optimizer).split(' (')[0],
-                                             'device': str(self.device),
-                                             'training_epochs': self.epochs,
-                                             'early_stop': self.early_stop,
-                                             'train_samples': len(self.train_loader) * model_summary.input_size[0][0],
-                                             'val_samples': len(self.val_loader) * model_summary.input_size[0][0],
-                                             'test_samples': len(self.test_loader) * model_summary.input_size[0][0],
-                                             'n_shot': n_shot,
-                                             'p_split': p_split
-                                             },
+        artifacts = {
+            'training_parameters': {
+                'model': self.name,
+                'lr': lr,
+                'scheduler': self.lr_scheduler,
+                'warm_up': warmup,
+                'optimizer': str(self.optimizer).split(' (')[0],
+                'device': str(self.device),
+                'training_epochs': self.epochs,
+                'early_stop': self.early_stop,
+                'train_samples': len(self.train_loader) * model_summary.input_size[0][0],
+                'val_samples': len(self.val_loader) * model_summary.input_size[0][0],
+                'test_samples': len(self.test_loader) * model_summary.input_size[0][0],
+                'n_shot': n_shot,
+                'p_split': p_split
+            },
+            'training_info': {
+                'best_val_loss': self.best_loss,
+                'best_epoch': self.best_epoch,
+                'last_epoch': self.last_epoch
+            },
+            'test_metrics': self.test_metrics,
+            'plot_info': {
+                'epochs': self.e,
+                'val_losses': self.vl,
+                'train_losses': self.tl,
+                'lr': self.lr
+            },
+            'model_summary': {
+                'batch_size': model_summary.input_size[0],
+                'input_size': model_summary.total_input,
+                'total_mult_adds': model_summary.total_mult_adds,
+                'back_forward_pass_size': model_summary.total_output_bytes,
+                'param_bytes': model_summary.total_param_bytes,
+                'trainable_params': model_summary.trainable_params,
+                'non-trainable_params': model_summary.total_params - model_summary.trainable_params,
+                'total_params': model_summary.total_params
+            }
+        }
 
-                     'training_info': {'best_val_loss': self.best_loss,
-                                       'best_epoch': self.best_epoch,
-                                       'last_epoch': self.last_epoch},
+        # Convert to JSON-serializable types
+        artifacts_serializable = convert_to_builtin_types(artifacts)
 
-                     'test_metrics': self.test_metrics,
-
-                     'plot_info': {'epochs': self.e,
-                                   'val_losses': self.vl,
-                                   'train_losses': self.tl,
-                                   'lr': self.lr},
-
-                     'model_summary': {'batch_size': model_summary.input_size[0],
-                                       'input_size': model_summary.total_input,
-                                       'total_mult_adds': model_summary.total_mult_adds,
-                                       'back_forward_pass_size': model_summary.total_output_bytes,
-                                       'param_bytes': model_summary.total_param_bytes,
-                                       'trainable_params': model_summary.trainable_params,
-                                       'non-trainable_params': model_summary.total_params - model_summary.trainable_params,
-                                       'total_params': model_summary.total_params}
-                     }
-        print('artifacts')
+        print("artifacts")
         with open(f"{self.out_folder}/artifacts.json", "w") as outfile:
-            json.dump(artifacts, outfile, indent=4)
+            json.dump(artifacts_serializable, outfile, indent=4)
         print("Artifacts saved successfully.")
-
 
 
 
