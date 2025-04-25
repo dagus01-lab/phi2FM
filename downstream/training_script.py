@@ -242,7 +242,6 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
     test_input = torch.rand((2,input_channels,input_size,input_size))
     
     if model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
-        core_kwargs = get_phisat2_model(model_size='nano', unet_type='geoaware')
         print(f'core_kwargs: {core_kwargs}')
         model = PhiSatNetDownstream(pretrained_path=path_model_weights, 
                                      task='segmentation' if model_name == 'phisatnet' else 'classification',
@@ -613,7 +612,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
         # Load the modified state dictionary into the model
         model.load_state_dict(new_state_dict, strict=True)
-        
+
     # Parallelize model (DP or DDP) and print model summary
     if data_parallel == 'DP':
         model = nn.DataParallel(model, device_ids=device_ids).to(model_device)
@@ -943,6 +942,7 @@ if __name__ == "__main__":
         # n_shot_list = [0, 50, 100, 500, 1000]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
+            # for freeze_pretrained in [True, False]:
             for freeze_pretrained in [False, True]:
                 args.freeze_pretrained = freeze_pretrained
                 if n_shot == 0 and not freeze_pretrained:
