@@ -242,6 +242,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
     test_input = torch.rand((2,input_channels,input_size,input_size))
     
     if model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
+        core_kwargs = get_phisat2_model(model_size='nano', unet_type='geoaware')
         print(f'core_kwargs: {core_kwargs}')
         model = PhiSatNetDownstream(pretrained_path=path_model_weights, 
                                      task='segmentation' if model_name == 'phisatnet' else 'classification',
