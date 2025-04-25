@@ -52,6 +52,10 @@ from utils import training_loops
 from utils.training_utils import read_yaml
 from utils.utils import module_memory_usage, dataloader_to_arrays, dataloader_to_tensors, convert_to_onnx, ddp_setup, ddp_cleanup
 
+
+from low_latency_utils.methane_dataloader import get_dataloader
+
+
 torch.manual_seed(123456)
 CNN_LIST = ['baseline_cnn', 'core_unet_nano','core_unet_tiny','core_unet_base', 'core_unet_large', 'core_unet_huge',
             'core_vae_nano', 'resnet_imagenet', 'resnet', 'core_encoder_nano', 'resnet_imagenet_classifier',
@@ -681,20 +685,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # -----------------------------------------------------------------------
     # 4. Load datasets
     # -----------------------------------------------------------------------
-
+    
     # Validate configuration
-    task_output_channels = {
-        'lc': 11,
-        'lc_classification': 11,
-        'roads': 1,
-        'building': 1,
-        'building_classification': 5,
-        'roads_classification': 2,
-        'coords': 3
-    }
-    assert output_channels == task_output_channels[downstream_task], (
-        f"{downstream_task} tasks should have {task_output_channels[downstream_task]} output channels, it has {output_channels}."
-    )
     assert n_shot is not None or split_ratio is not None, "Please define data partition protocol!"
     assert isinstance(n_shot, int) ^ isinstance(split_ratio, float), "n_shot cannot be used with split_ratio!"
 
@@ -719,6 +711,21 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     crop_images = True if model_name == 'phileo_precursor' or model_name == 'phileo_precursor_classifier' else False
     by_region = False if downstream_task == 'coords' else True
     pos_weight, weights = None, None
+
+    import pdb; pdb.set_trace()
+
+    loaders = get_dataloader(
+        zarr_path   = "/Data/evgenios/methane/methane_patches",
+        batch_size  = 8,
+        num_workers = 4,
+        split       = (0.7, 0.2, 0.1),   # 70 % / 20 % / 10 %
+    )
+
+    train_loader = loaders["train"]
+    val_loader   = loaders["val"]
+    test_loader  = loaders["test"]
+
+    import pdb; pdb.set_trace()
 
 
     # Data partition
@@ -942,14 +949,14 @@ if __name__ == "__main__":
         # n_shot_list = [0, 50, 100, 500, 1000]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
-            for freeze_pretrained in [False, True]:
+            for freeze_pretrained in [True, False]:
                 args.freeze_pretrained = freeze_pretrained
                 if n_shot == 0 and not freeze_pretrained:
                     continue
-                for downstream_task in ['roads']:
-                # for downstream_task in ['lc', 'lc_classification', 'building', 'roads']:
+                # for downstream_task in ['building']:
+                for downstream_task in ['lc', 'lc_classification', 'building']:
                     args.downstream_task = downstream_task
-                    args.output_channels = 1 if 'building' in args.downstream_task or 'roads' in args.downstream_task else 11
+                    args.output_channels = 1 if 'building' in args.downstream_task else 11
                     args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
                 
                     print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")
