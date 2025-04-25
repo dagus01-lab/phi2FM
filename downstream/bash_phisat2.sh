@@ -5,12 +5,12 @@ configs=(
     # "args/phisat2/geoaware.yml"
     # "args/phisat2/prithvi.yml"
     # "args/phisat2/satmae.yml"
-    # "args/phisat2/moco.yml"
+    "args/phisat2/moco.yml"
     # "args/phisat2/dino.yml"
     # "args/phisat2/seco.yml"
     # "args/phisat2/uniphi.yml"
-    "args/phisat2/gassl.yml"
-    "args/phisat2/caco.yml"
+    # "args/phisat2/gassl.yml"
+    # "args/phisat2/caco.yml"
     # "args/phisat2/vit.yml"
 )
 

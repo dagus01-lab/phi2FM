@@ -24,13 +24,13 @@ warmup_gamma: 10
 min_lr: null
 pretrained_model_path: /home/phisat2/phisat2_foundation/phisat2_fm/pretrained_weights/B13_rn50_moco_0099.pth
 freeze_pretrained: True
-data_path_128_10m: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_128/
-data_path_224_10m: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_224/
-data_path_224_30m: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_224/
+data_path_128_10m: /Data_phisat2/np_patches_128/
+data_path_224_10m: /Data_phisat2/np_patches_224/
+data_path_224_30m: /Data_phisat2/np_patches_224/
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
 downstream_model_path: null
-data_path_inference_128: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_128/
-data_path_inference_224: /home/phisat2/phisat2_foundation/phisat2_fm/phileo-bench/np_patches_224/
+data_path_inference_128: /Data_phisat2/np_patches_128/
+data_path_inference_224: /Data_phisat2/np_patches_224/
 output_path: /home/phisat2/models
 data_parallel: False
 device_ids: [0]

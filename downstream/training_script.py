@@ -5,6 +5,7 @@ import torch
 # torch.autograd.detect_anomaly(check_nan=True)
 
 from torchinfo import summary
+from fvcore.nn import FlopCountAnalysis
 
 import numpy as np
 import random
@@ -410,11 +411,11 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
 
     elif model_name == 'caco':
         resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
-        return moco_resnet(path_model_weights, classifier=False, bands=4, **resnet_kwargs)
+        return moco_resnet(path_model_weights, classifier=False, bands=4, is_caco=True, **resnet_kwargs)
 
     elif model_name == 'caco_classifier':
         resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
-        return moco_resnet(path_model_weights, classifier=True, bands=4, **resnet_kwargs)
+        return moco_resnet(path_model_weights, classifier=True, bands=4, is_caco=True, **resnet_kwargs)
 
     elif model_name == 'dino':
         resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
@@ -613,6 +614,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         # Load the modified state dictionary into the model
         model.load_state_dict(new_state_dict, strict=True)
 
+    
+    
     # Parallelize model (DP or DDP) and print model summary
     if data_parallel == 'DP':
         model = nn.DataParallel(model, device_ids=device_ids).to(model_device)
@@ -634,8 +637,48 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             'seasonal_contrast_classifier': (batch_size, input_channels, 224, 224)
         }
 
-        input_size = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
-        model_summary = summary(model, input_size=input_size, dtypes=[torch.float32])
+        input_size_total = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
+        model_summary = summary(model, input_size=input_size_total, dtypes=[torch.float32])
+
+        # import pdb; pdb.set_trace()
+        dummy_input = torch.randn(1, input_channels, input_size, input_size).to(model_device)
+        model.eval()
+        flops = FlopCountAnalysis(model, dummy_input)
+        print(f"GFLOPS: {flops.total() / 1e9:.2f}")
+
+
+        flops_dict = flops.by_module()
+
+        # Sum only modules where parameters don't require grad
+        frozen_flops = 0
+        named_modules = dict(model.named_modules())
+        for name, flop in flops_dict.items():
+            module = named_modules[name]
+
+            # Only count if it's a LEAF module (no submodules with parameters)
+            is_leaf = all(
+                not any(True for _ in m.parameters())
+                for m in module.children()
+            )
+
+            if is_leaf and all(not p.requires_grad for p in module.parameters()):
+                frozen_flops += flop
+
+        print(f"FLOPs from frozen modules only: {frozen_flops / 1e9:.2f} GFLOPs")
+
+
+
+        def count_parameters(model):
+            total_params = sum(p.numel() for p in model.parameters())
+            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            return total_params, trainable_params
+
+        total, trainable = count_parameters(model)
+        print(f"Total params: {total:,}")
+        print(f"Trainable params: {trainable:,}")
+        print(f"Non-trainable params: {total - trainable:,}")
+
+        # import pdb; pdb.set_trace()
 
         if model_device == 'cpu':
             model.to(model_device)
@@ -938,18 +981,18 @@ if __name__ == "__main__":
 
     # 2. Run main function
     if True:
-        n_shot_list = [100, 500]
+        # n_shot_list = [50]
+        n_shot_list = [5000]
         # n_shot_list = [0, 50, 100, 500, 1000]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
             # for freeze_pretrained in [True, False]:
-            for freeze_pretrained in [True, False]:
+            for freeze_pretrained in [False]:
                 args.freeze_pretrained = freeze_pretrained
                 if n_shot == 0 and not freeze_pretrained:
                     continue
-                # for downstream_task in ['building']:
-                for downstream_task in ['lc', 'lc_classification', 'building', 'roads']:
-                # for downstream_task in ['roads']:
+                for downstream_task in ['lc', 'lc_classification', 'building']:
+                # for downstream_task in ['lc', 'lc_classification', 'building', 'roads']:
                     args.downstream_task = downstream_task
                     args.output_channels = 1 if 'building' in args.downstream_task or 'roads' in args.downstream_task else 11
                     args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
