@@ -22,7 +22,7 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/ndionelis/models/pretrain/20250402_phisat2net_geoaware_1.0/phisat2net_geoaware_best.pt
+pretrained_model_path: /home/ndionelis/phileo_data/phileo_data/phileo_data/phisat2_fm/pretrained_weights/phisat2net_geoaware_best.pt
 freeze_pretrained: True
 data_path_128_10m: /Data/phileo-bench/np_patches_128/
 data_path_224_10m: /Data/phileo-bench/np_patches_224/
