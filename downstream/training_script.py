@@ -948,7 +948,7 @@ if __name__ == "__main__":
                 args.freeze_pretrained = freeze_pretrained
                 if n_shot == 0 and not freeze_pretrained:
                     continue
-                for downstream_task in ['lc_classification']:
+                for downstream_task in ['building']:
                 # for downstream_task in ['lc', 'lc_classification', 'building', 'roads']:
                     args.downstream_task = downstream_task
                     args.output_channels = 1 if 'building' in args.downstream_task or 'roads' in args.downstream_task else 11
