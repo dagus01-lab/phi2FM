@@ -3,7 +3,7 @@ experiment_name: phisatnet_downstream
 downstream_task: lc
 model_name: phisatnet
 augmentations: True
-batch_size: 32
+batch_size: 16
 model_device: cuda
 generator_device: cuda
 num_workers: 16
@@ -22,7 +22,7 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /Data/pretrained_weights/phisatnet/phisat2net_geoaware_epoch_19.pt
+pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/phisat2_fm/pretrained_weights/phisat2net_geoaware_best.pt
 freeze_pretrained: True
 data_path_128_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
 data_path_224_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/

@@ -42,15 +42,15 @@ MIN_MAJORTOM = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
 MAX_MAJORTOM = np.array([1.41421356, 1.41421356, 1.41421356, 1.41421356, 1.41421356, 1.41421356, 1.41421356, 1.41421356])
 
 
-# PHISAT_MIN = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
-# PHISAT_MAX = np.array([100., 100., 100., 100., 100., 100., 100., 100.])
-# PHISAT_MEAN = np.array([39.91732045, 37.5492021, 37.54950869, 39.21091477, 44.2665634, 39.50358262, 43.62563718, 45.28759192])
-# PHISAT_STD = np.array([17.06368142, 17.08672835, 20.21215486, 17.8629414, 20.11975944, 20.02886564, 19.79381833, 20.16760416])
-
 PHISAT_MIN = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
-PHISAT_MAX = np.array([10000., 10000., 10000., 10000., 10000., 10000., 10000., 10000.])
-PHISAT_MEAN = np.array([1884.56169544, 1701.8988641, 1818.49680678, 1856.58051233, 2364.33335501, 1961.68849886, 2294.99146283, 2457.69823862])
-PHISAT_STD = np.array([1899.72067083, 1743.80445286, 2020.09785262, 1873.41863641, 1924.71680909, 2034.2549607, 1992.56097028, 1996.09805038])
+PHISAT_MAX = np.array([100., 100., 100., 100., 100., 100., 100., 100.])
+PHISAT_MEAN = np.array([39.91732045, 37.5492021, 37.54950869, 39.21091477, 44.2665634, 39.50358262, 43.62563718, 45.28759192])
+PHISAT_STD = np.array([17.06368142, 17.08672835, 20.21215486, 17.8629414, 20.11975944, 20.02886564, 19.79381833, 20.16760416])
+
+# PHISAT_MIN = np.array([0., 0., 0., 0., 0., 0., 0., 0.])
+# PHISAT_MAX = np.array([10000., 10000., 10000., 10000., 10000., 10000., 10000., 10000.])
+# PHISAT_MEAN = np.array([1884.56169544, 1701.8988641, 1818.49680678, 1856.58051233, 2364.33335501, 1961.68849886, 2294.99146283, 2457.69823862])
+# PHISAT_STD = np.array([1899.72067083, 1743.80445286, 2020.09785262, 1873.41863641, 1924.71680909, 2034.2549607, 1992.56097028, 1996.09805038])
 
 
 
@@ -225,7 +225,7 @@ def callback_preprocess_landcover_prithvi(x, y):
 def callback_preprocess_phisatnet(x, y):
     assert x.shape[2] == 8, "Input x must have 8 channels for phisatnet model."
     
-    # x = np.sqrt(x)
+    x = np.sqrt(x)
     x = np.clip(x, PHISAT_MIN, PHISAT_MAX)
     x = (x - PHISAT_MEAN) / PHISAT_STD
     
@@ -238,7 +238,7 @@ def callback_preprocess_phisatnet(x, y):
 def callback_preprocess_phisatnet_lc(x, y):
     assert x.shape[2] == 8, "Input x must have 8 channels for phisatnet model."
     
-    # x = np.sqrt(x)
+    x = np.sqrt(x)
     x = np.clip(x, PHISAT_MIN, PHISAT_MAX)
     x = (x - PHISAT_MEAN) / PHISAT_STD
     
