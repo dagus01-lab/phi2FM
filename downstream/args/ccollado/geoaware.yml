@@ -22,7 +22,7 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/pretrained_models/01112023_CoreEncoderMultiHead_geo_pred_geo_reduce_on_plateau/CoreEncoderMultiHead_geo_pred_best.pt # **********************************
+pretrained_model_path: /home/ccollado/pretrained_weights/CoreEncoderMultiHead_geo_pred_best.pt
 freeze_pretrained: True
 data_path_128_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_128/
 data_path_224_10m: /home/ccollado/phileo_phisat2/L1C/np_patches_224/

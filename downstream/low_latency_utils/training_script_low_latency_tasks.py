@@ -52,6 +52,10 @@ from utils import training_loops
 from utils.training_utils import read_yaml
 from utils.utils import module_memory_usage, dataloader_to_arrays, dataloader_to_tensors, convert_to_onnx, ddp_setup, ddp_cleanup
 
+
+from downstream.low_latency_utils.methane_dataloader import get_dataloader
+
+
 torch.manual_seed(123456)
 CNN_LIST = ['baseline_cnn', 'core_unet_nano','core_unet_tiny','core_unet_base', 'core_unet_large', 'core_unet_huge',
             'core_vae_nano', 'resnet_imagenet', 'resnet', 'core_encoder_nano', 'resnet_imagenet_classifier',
@@ -70,13 +74,15 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        'GeoAware_core_nano_classifier', 'GeoAware_contrastive_core_nano_classifier',
                        'GeoAware_mh_pred_core_nano_classifier', 'seasonal_contrast_classifier',
                        'phileo_precursor', 'phileo_precursor_classifier', 'phisatnet', 'phisatnet_classifier',
-                       'moco', 'moco_classifier', 'dino', 'dino_classifier',
+                       'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier',
+                       'caco', 'caco_classifier'
                        ]
 
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
                            'vit_cnn_classifier', 'prithvi_classifier', 'vit_cnn_wSkip', 'vit_cnn_gc_wSkip']
 
-MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier', 'moco', 'moco_classifier', 'dino', 'dino_classifier']
+MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier', 
+              'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier', 'caco', 'caco_classifier']
 MODELS_224_r30 = ['prithvi', 'prithvi_classifier']
 
 MODEL_LIST = CNN_LIST + MIXER_LIST + VIT_LIST + CNN_PRETRAINED_LIST + VIT_CNN_LIST + VIT_CNN_PRETRAINED_LIST
@@ -239,7 +245,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
     test_input = torch.rand((2,input_channels,input_size,input_size))
     
     if model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
-        core_kwargs = get_phisat2_model(model_size='xsmall', unet_type='geoaware')
+        core_kwargs = get_phisat2_model(model_size='nano', unet_type='geoaware')
         print(f'core_kwargs: {core_kwargs}')
         model = PhiSatNetDownstream(pretrained_path=path_model_weights, 
                                      task='segmentation' if model_name == 'phisatnet' else 'classification',
@@ -392,12 +398,28 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
     
     elif model_name == 'moco':
         resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
-        return moco_resnet(path_model_weights, classifier=False, **resnet_kwargs)
+        return moco_resnet(path_model_weights, classifier=False, bands=13, **resnet_kwargs)
     
     elif model_name == 'moco_classifier':
         resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
-        return moco_resnet(path_model_weights, classifier=True, **resnet_kwargs)
+        return moco_resnet(path_model_weights, classifier=True, bands=13, **resnet_kwargs)
+
+    elif model_name == 'gassl':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=False, bands=3, **resnet_kwargs)
     
+    elif model_name == 'gassl_classifier':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=True, bands=3, **resnet_kwargs)
+
+    elif model_name == 'caco':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=False, bands=4, **resnet_kwargs)
+
+    elif model_name == 'caco_classifier':
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return moco_resnet(path_model_weights, classifier=True, bands=4, **resnet_kwargs)
+
     elif model_name == 'dino':
         resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
         return dino_resnet(path_model_weights, classifier=False, **resnet_kwargs)
@@ -663,20 +685,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # -----------------------------------------------------------------------
     # 4. Load datasets
     # -----------------------------------------------------------------------
-
+    
     # Validate configuration
-    task_output_channels = {
-        'lc': 11,
-        'lc_classification': 11,
-        'roads': 1,
-        'building': 1,
-        'building_classification': 5,
-        'roads_classification': 2,
-        'coords': 3
-    }
-    assert output_channels == task_output_channels[downstream_task], (
-        f"{downstream_task} tasks should have {task_output_channels[downstream_task]} output channels"
-    )
     assert n_shot is not None or split_ratio is not None, "Please define data partition protocol!"
     assert isinstance(n_shot, int) ^ isinstance(split_ratio, float), "n_shot cannot be used with split_ratio!"
 
@@ -702,46 +712,18 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     by_region = False if downstream_task == 'coords' else True
     pos_weight, weights = None, None
 
+    import pdb; pdb.set_trace()
 
-    # Data partition
-    if isinstance(n_shot, int):
-        if n_shot == 0:
-            n_shot = 1
-            train_mode = 'inference'
-        
-        x_train, y_train, x_val, y_val, pos_weight, weights = data_protocol.protocol_fewshot_memmapped(
-            folder=dataset_folder,
-            dst=None,
-            n=n_shot,
-            regions=regions,
-            y=downstream_task,
-            data_selection='create',
-            name=dataset_name,
-            crop_images=crop_images
-        )
-
-    elif isinstance(split_ratio, float):
-        x_train, y_train, x_val, y_val = data_protocol.protocol_split(
-            dataset_folder,
-            split_percentage=split_ratio,
-            regions=regions,
-            y=downstream_task,
-            by_region=by_region
-        )
-
-    # Prepare testset and inference set
-    x_test, y_test = data_protocol.get_testset(
-        folder=dataset_folder,
-        y=downstream_task,
-        crop_images=crop_images,
-        by_region=by_region,
+    train_loader, val_loader, test_loader = get_dataloader(
+        zarr_path   = "/Data/evgenios/methane/methane_patches",
+        batch_size  = 8,
+        num_workers = 4,
+        split       = (0.7, 0.2, 0.1),   # 70 % / 20 % / 10 %
     )
-    x_inference, y_inference = data_protocol.get_testset(
-        folder=data_path_inference,
-        y=downstream_task,
-        crop_images=crop_images,
-        by_region=by_region
-    )
+    
+    import pdb; pdb.set_trace()
+
+
 
     # Log shapes of first elements in each dataset
     if world_rank == 0:
@@ -920,8 +902,8 @@ if __name__ == "__main__":
 
     # 2. Run main function
     if True:
-        # n_shot_list = [5000]
-        n_shot_list = [0, 50, 100, 500, 1000, 5000]
+        n_shot_list = [None]
+        # n_shot_list = [0, 50, 100, 500, 1000]
         for n_shot in n_shot_list:
             args.n_shot = n_shot
             for freeze_pretrained in [True, False]:
@@ -929,9 +911,9 @@ if __name__ == "__main__":
                 if n_shot == 0 and not freeze_pretrained:
                     continue
                 # for downstream_task in ['building']:
-                for downstream_task in ['roads']:
+                for downstream_task in ['lc', 'lc_classification', 'building']:
                     args.downstream_task = downstream_task
-                    args.output_channels = 1 if 'building' in args.downstream_task or 'roads' in args.downstream_task else 11
+                    args.output_channels = 1 if 'building' in args.downstream_task else 11
                     args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
                 
                     print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")

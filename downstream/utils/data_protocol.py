@@ -208,177 +208,244 @@ def protocol_split(folder: str,
 
 
 
+from typing import List, Tuple
+
+SEED = 12345
+_rng = random.Random(SEED)          # one local RNG instance used everywhere
 
 
-def protocol_fewshot_memmapped(folder: str,
-                     dst: str,
-                     n: int = 10,
-                     val_ratio: float = 0.2,
-                     regions: list = None,
-                     y: str = 'building',
-                     data_selection: str = 'strict',
-                     name: str = '128_10m',
-                     crop_images: bool = False
-                     ):
-
+def _indices_filename(name: str, y: str, n: int) -> str:
     """
-    Loads n-samples data from specified geographic regions.
-    :param folder: dataset source folder
-    :param dst: save folder
-    :param n: number of samples
-    :param val_ratio: ratio of validation set
-    :param regions: geographical regions to sample
-    :param y: downstream label from roads, kg, building, lc, coords
-    :param data_selection: choose from 'strict' (take train/val selection from predefined selection), 'create' (use train/val selection if exists, else create it), 'random' (create train/val selection randomly)
-    :return: train, val MultiArrays
+    Unique, stable file name for the (name, y, n) configuration.
+    """
+    return f"indices_phisat2/indices_{name}_{y}_{n}.json"
+
+
+def protocol_fewshot_memmapped(
+    folder: str,
+    dst: str,
+    n: int = 10,
+    val_ratio: float = 0.2,
+    regions: List[str] = None,
+    y: str = "building",
+    data_selection: str = "create",      # <-- new default
+    name: str = "128_10m",
+    crop_images: bool = False
+) -> Tuple[
+    "MultiArray_1D", "MultiArray_1D",
+    "MultiArray_1D", "MultiArray_1D",
+    np.ndarray, np.ndarray
+]:
+    """
+    Few-shot loader that is random only **once** (first run with this
+    (name, y, n) configuration).  
+    Later runs reuse the saved indices so results are deterministic.
+
+    Parameters
+    ----------
+    folder : str
+        Root directory of the data.
+    dst : str
+        Not used inside this function but kept for API compatibility.
+    n : int
+        Total shots per region for the **train** set.
+    val_ratio : float
+        Validation shots are ceil(n * val_ratio) per region.
+    regions : list[str] or None
+        Regions to sample. Default = all.
+    y : str
+        Task label: 'building', 'building_classification',
+        'lc', 'lc_classification', ...
+    data_selection : {'strict', 'create', 'random'}
+        * 'strict'  – must find an existing file; error if not found  
+        * 'create'  – load file if it exists, otherwise **create + save**  
+        * 'random'  – ignore / overwrite file every run
+    name : str
+        Spatial resolution identifier that is part of the file key.
+    crop_images : bool
+        Pass-through to `load_and_crop`.
     """
 
+    # ---------------- region sanity checks ----------------
     if regions is None:
-        regions = list(REGIONS_BUCKETS.keys())
-        # import pdb ; pdb.set_trace()
+        regions = list(REGIONS_BUCKETS.keys())            # type: ignore
     else:
-        # import pdb ; pdb.set_trace()
         for r in regions:
-            assert r in list(REGIONS_BUCKETS.keys()), f"region {r} not found. Possible regions are {list(REGIONS_BUCKETS.keys())}"
-    regions = check_region_validity(folder, regions, y)
+            assert r in REGIONS_BUCKETS, (                # type: ignore
+                f"Region {r} not found. "
+                f"Possible regions: {list(REGIONS_BUCKETS.keys())}"   # type: ignore
+            )
+    regions = check_region_validity(folder, regions, y)   # type: ignore
+    assert data_selection in {"strict", "create", "random"}
 
-    assert data_selection in ['strict','create','random']
+    # ---------------- indices discovery / load ----------------
+    index_file = _indices_filename(name, y, n)
+    samples_loaded = (
+        data_selection != "random" and os.path.exists(index_file)
+    )
 
-    samples_loaded = False
-    if data_selection != 'random':
-        indices_path = glob(f"indices_phisat2/indices_*_{name}_{y}_{n}.json")
-        
-        if len(indices_path) == 0:
-            if data_selection == 'create':
-                samples_dict = {}
-                print(f'creating train/val selection for task {y}, nshot={n}')
-            else:
-                raise ValueError('No file found for nshot sample selection while data_selection="strict". If you want to create fixed indices on the fly or use random train/val samples consider setting data_selction to "create" or "random"')
-        
-        elif len(indices_path) > 1:
-            raise ValueError('Multiple files found for nshot sample selection')
-        
-        else:
-            samples_loaded = True
-            print('Loading predefined train/val selection')
-            with open(indices_path[0], 'r') as f:
-                samples_dict = json.load(f)
+    if samples_loaded:
+        print(f"Loading predefined train/val selection from {index_file}")
+        with open(index_file, "r") as f:
+            samples_dict = json.load(f)
+    else:
+        print(f"Creating new train/val selection in {index_file}")
+        samples_dict = {}
 
-    x_train_samples = []
-    y_train_samples = []
-    x_val_samples = []
-    y_val_samples = []
+    # ---------------- accumulators ----------------
+    x_train_samples, y_train_samples = [], []
+    x_val_samples,   y_val_samples   = [], []
 
-    # pos weights for lc classification
-    pos_counts = np.zeros(11)
-    neg_counts = np.zeros(11)
 
-    for i, region in enumerate(regions):
-        print(i,region)
+    # ---------------- iterate over regions ----------------
+    for region in regions:
+        print(region)
 
-        # generate multi array for region
+        # --- gather all npy paths for the region ---
         x_train_files = []
-        for sub_regions in REGIONS_BUCKETS[region]: 
-            x_train_files += sorted(glob(os.path.join(folder, f"{sub_regions}*train_s2.npy")))
-        y_train_files = [f_name.replace('s2', f'label_{y}') for f_name in x_train_files]
-        x_val_files = [f_name.replace('train', 'val') for f_name in x_train_files]
-        y_val_files = [f_name.replace('train', 'val') for f_name in y_train_files]
+        for sub in REGIONS_BUCKETS[region]:               # type: ignore
+            x_train_files += sorted(
+                glob(os.path.join(folder, f"{sub}*train_s2.npy"))
+            )
 
-        # pdb.set_trace()
+        y_train_files = [f.replace("s2", f"label_{y}") for f in x_train_files]
+        x_val_files   = [f.replace("train", "val")        for f in x_train_files]
+        y_val_files   = [f.replace("train", "val")        for f in y_train_files]
 
-        # checks that s2 and label numpy files are consistent
-        x_train_files, y_train_files = sanity_check_labels_exist(x_train_files, y_train_files)
-        x_val_files, y_val_files = sanity_check_labels_exist(x_val_files, y_val_files)
+        # -- file existence sanity checks --
+        x_train_files, y_train_files = sanity_check_labels_exist(
+            x_train_files, y_train_files
+        )
+        x_val_files, y_val_files = sanity_check_labels_exist(
+            x_val_files, y_val_files
+        )
 
-        x_train = beo.MultiArray([load_and_crop(f, crop_images) for f in x_train_files])
-        y_train = beo.MultiArray([load_and_crop(f, crop_images) for f in y_train_files])
-        x_val = beo.MultiArray([load_and_crop(f, crop_images) for f in x_val_files])
-        y_val = beo.MultiArray([load_and_crop(f, crop_images) for f in y_val_files])
+        # -- load into MultiArrays (or ndarray lists) --
+        x_train = beo.MultiArray([load_and_crop(f, crop_images) for f in x_train_files])    # type: ignore
+        y_train = beo.MultiArray([load_and_crop(f, crop_images) for f in y_train_files])    # type: ignore
+        x_val   = beo.MultiArray([load_and_crop(f, crop_images) for f in x_val_files])      # type: ignore
+        y_val   = beo.MultiArray([load_and_crop(f, crop_images) for f in y_val_files])      # type: ignore
 
+        # -- number of samples per split for this region --
         n_train_samples = min(n, len(x_train))
-        n_val_samples = min(int(np.ceil(n * val_ratio)), len(x_val))
+        n_val_samples   = min(int(np.ceil(n * val_ratio)), len(x_val))
 
+        # ==================================================
+        #  Choose indices
+        # ==================================================
         if samples_loaded:
-            assert len(x_train) == samples_dict[region]['length_multi_array_train']
-            assert len(x_val) == samples_dict[region]['length_multi_array_val']
+            # consistency checks in strict mode
+            assert len(x_train) == samples_dict[region]["length_multi_array_train"]
+            assert len(x_val)   == samples_dict[region]["length_multi_array_val"]
 
-            train_indices = samples_dict[region]['train_indices']
-            val_indices = samples_dict[region]['val_indices']
-
-            # assert len(train_indices) == n_train_samples
-            # import pdb; pdb.set_trace()
-            # assert len(val_indices) == n_val_samples
+            train_indices = samples_dict[region]["train_indices"]
+            val_indices   = samples_dict[region]["val_indices"]
 
         else:
-            train_indices= random.Random(12345).sample(range(0, len(x_train)), n_train_samples)
-            val_indices  = random.Random(12345).sample(range(0, len(y_val)), n_val_samples)
+            # ------------------------------------------------------------------
+            # 1. Start with a uniform random sample from the local RNG
+            train_indices = _rng.sample(range(len(x_train)), n_train_samples)
+            val_indices   = _rng.sample(range(len(x_val)),   n_val_samples)
 
-            if y == 'building' or y == 'building_classification':
-                if y == 'building':
-                    hot_encoded_train = np.array([to_one_hot_building(yt) for yt in y_train])
-                    hot_encoded_val = np.array([to_one_hot_building(yt) for yt in y_val])
-                elif y == 'building_classification':
-                    hot_encoded_train = np.array([yt for yt in y_train])
-                    hot_encoded_val = np.array([yt for yt in y_val])
+            # ------------------------------------------------------------------
+            # 2. Optionally replace them with class-balanced subsets
+            #    (exactly the same logic you had, just switching to `_rng`)
+            # ------------------------------------------------------------------
+            if y in {"building", "building_classification"}:
+                if y == "building":
+                    hot_train = np.array([to_one_hot_building(yt) for yt in y_train])
+                    hot_val   = np.array([to_one_hot_building(yt) for yt in y_val])
+                else:  # "building_classification"
+                    hot_train = np.array([yt for yt in y_train])
+                    hot_val   = np.array([yt for yt in y_val])
 
-                train_indices = proportional_subset_indices(hot_encoded_train, n_train_samples, max_n_shot=5000)
-                val_indices = proportional_subset_indices(hot_encoded_val, n_val_samples, max_n_shot=int(5000*val_ratio))
+                train_indices = proportional_subset_indices(
+                    hot_train, n_train_samples, max_n_shot=5000
+                )
+                val_indices = proportional_subset_indices(
+                    hot_val, n_val_samples, max_n_shot=int(5000 * val_ratio)
+                )
 
-            # elif y == 'lc' or y == 'lc_classification':
-            elif y == 'lc_classification':
-                chosen_by_lp_rus = 2/3
-                if y == 'lc':
-                    hot_encoded_train = np.array([to_one_hot_lc(yt) for yt in y_train])
-                    hot_encoded_val = np.array([to_one_hot_lc(yt) for yt in y_val])
-                elif y == 'lc_classification':
-                    hot_encoded_train = np.array([yt for yt in y_train])
-                    hot_encoded_val = np.array([yt for yt in y_val])
+            elif y in {"lc", "lc_classification"}:
+                # keep ~2/3 from LP-RUS, rest random
+                chosen_by_lp_rus = 2 / 3
+
+                if y == "lc":
+                    hot_train = np.array([to_one_hot_lc(yt) for yt in y_train])
+                    hot_val   = np.array([to_one_hot_lc(yt) for yt in y_val])
+                else:  # "lc_classification"
+                    hot_train = np.array([yt for yt in y_train])
+                    hot_val   = np.array([yt for yt in y_val])
 
                 # train
-                idx_train = LP_RUS_with_scale_down(hot_encoded_train, max_n_shot=5000, n_shot=int(n_train_samples * chosen_by_lp_rus))
-                remaining_indices = list(set(range(len(y_train))) - set(idx_train))
-                random_indices = random.sample(remaining_indices, n_train_samples - len(idx_train))
-                train_indices = idx_train + random_indices
-                random.shuffle(train_indices)
-                
-                num_samples = len(hot_encoded_train[train_indices])
-                pos_counts += np.sum(hot_encoded_train[train_indices], axis=0)
-                neg_counts += num_samples - np.sum(hot_encoded_train[train_indices], axis=0)
-                
+                idx_train_lp = LP_RUS_with_scale_down(
+                    hot_train,
+                    max_n_shot=5000,
+                    n_shot=int(n_train_samples * chosen_by_lp_rus)
+                )
+                remaining = list(set(range(len(y_train))) - set(idx_train_lp))
+                random_extra = _rng.sample(
+                    remaining, n_train_samples - len(idx_train_lp)
+                )
+                train_indices = idx_train_lp + random_extra
+                _rng.shuffle(train_indices)
+
                 # val
-                idx_val = LP_RUS_with_scale_down(hot_encoded_val, max_n_shot=int(5000*val_ratio), n_shot=int(n_val_samples * chosen_by_lp_rus))
-                remaining_indices = list(set(range(len(y_val))) - set(idx_val))
-                random_indices = random.sample(remaining_indices, n_val_samples - len(idx_val))
-                val_indices = idx_val + random_indices
-                random.shuffle(val_indices)
+                idx_val_lp = LP_RUS_with_scale_down(
+                    hot_val,
+                    max_n_shot=int(5000 * val_ratio),
+                    n_shot=int(n_val_samples * chosen_by_lp_rus)
+                )
+                remaining = list(set(range(len(y_val))) - set(idx_val_lp))
+                random_extra = _rng.sample(
+                    remaining, n_val_samples - len(idx_val_lp)
+                )
+                val_indices = idx_val_lp + random_extra
+                _rng.shuffle(val_indices)
 
+            # save indices for this region into dict
+            samples_dict[region] = {
+                "train_indices": train_indices,
+                "val_indices":   val_indices,
+                "length_multi_array_train": len(x_train),
+                "length_multi_array_val":   len(x_val)
+            }
 
-
-            samples_dict[region] = {'train_indices':train_indices, 'val_indices':val_indices, 'length_multi_array_train':len(x_train), 'length_multi_array_val':len(x_val)}
-
+        # =================== gather samples ===================
         x_train_samples += [x_train[i] for i in train_indices]
         y_train_samples += [y_train[i] for i in train_indices]
+        x_val_samples   += [x_val[i]   for i in val_indices]
+        y_val_samples   += [y_val[i]   for i in val_indices]
 
-        x_val_samples += [x_val[i] for i in val_indices]
-        y_val_samples += [y_val[i] for i in val_indices]
+    # ---------------- persist indices the first time ----------------
+    if not samples_loaded and data_selection == "create":
+        os.makedirs(os.path.dirname(index_file), exist_ok=True)
+        with open(index_file, "w") as f:
+            json.dump(samples_dict, f)
+        print(f"Saved new sampling schema to {index_file}")
 
-    # if not samples_loaded and data_selection=='create':
-        # out_path = f'indices/indices_{date.today().strftime("%d%m%Y")}_{name}_{y}_{n}.json'
-        # print(f'No predefined train/val sampling was used. Saving current sampling schema in {out_path}')
-        # with open(out_path, 'w') as f:
-        #     json.dump(samples_dict, f)
-    
-    if y == 'lc_classification':
+    # ---------------- pos_weight & class weights ----------------
+    if y == "lc_classification":
+        ys = np.asarray(y_train_samples)           # shape (N, 11)
+        pos_counts = ys.sum(axis=0)
+        neg_counts = len(ys) - pos_counts
         pos_weight = neg_counts / (pos_counts + 1e-8)
     else:
         pos_weight = None
-    
-    if y == 'building_classification':
+
+    if y == "building_classification":
         class_counts = np.sum(y_train_samples, axis=0)
-        weights = np.where(class_counts > 0, 1.0 / class_counts, 1)
+        weights = np.where(class_counts > 0, 1.0 / class_counts, 1.0)
         weights[class_counts > 0] /= np.sum(weights[class_counts > 0])
     else:
         weights = None
-    
-    return MultiArray_1D(x_train_samples), MultiArray_1D(y_train_samples), MultiArray_1D(x_val_samples), MultiArray_1D(y_val_samples), pos_weight, weights
 
+    # ---------------- return as before ----------------
+    return (
+        MultiArray_1D(x_train_samples),  # type: ignore
+        MultiArray_1D(y_train_samples),  # type: ignore
+        MultiArray_1D(x_val_samples),    # type: ignore
+        MultiArray_1D(y_val_samples),    # type: ignore
+        pos_weight,
+        weights,
+    )

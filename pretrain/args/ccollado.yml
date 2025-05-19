@@ -3,7 +3,7 @@ experiment_name: pretrain
 downstream_task: pretrain
 model_name: phisatnet_geoaware_xsmall
 augmentations: True
-batch_size: 12
+batch_size: 4
 model_device: cuda
 generator_device: cuda
 num_workers: 6
@@ -14,7 +14,7 @@ input_size: 224
 lr: 0.0001
 lr_scheduler: cosine_annealing
 n_shot: null
-split_ratio: 1.0
+split_ratio: 0.0001
 vis_val: True
 warmup: True
 warmup_steps: 5

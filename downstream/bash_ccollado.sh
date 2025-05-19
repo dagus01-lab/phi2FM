@@ -2,15 +2,17 @@
 
 # Define the list of configuration files
 configs=(
-    # "args/ccollado/geoaware.yml"
-    # "args/ccollado/prithvi.yml"
-    # "args/ccollado/satmae.yml"
-    # "args/ccollado/moco.yml"
-    # "args/ccollado/dino.yml"
+    "args/ccollado/geoaware.yml"
+    "args/ccollado/prithvi.yml"
+    "args/ccollado/satmae.yml"
+    "args/ccollado/moco.yml"
     "args/ccollado/phisatnet.yml"
-    # "args/ccollado/seco.yml"
-    # "args/ccollado/uniphi.yml"
-    # "args/ccollado/vit.yml"
+    "args/ccollado/dino.yml"
+    "args/ccollado/seco.yml"
+    "args/ccollado/uniphi.yml"
+    "args/ccollado/gassl.yml"
+    "args/ccollado/caco.yml"
+    # "args/phisat2/vit.yml"
 )
 
 # Loop through each config file and execute the training script sequentially

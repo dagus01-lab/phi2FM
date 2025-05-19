@@ -44,6 +44,7 @@ import numpy as np
 import torch
 import xarray as xr
 from torch.utils.data import Dataset, DataLoader
+import random
 
 __all__ = [
     "MethaneZarrDataset",
@@ -225,6 +226,78 @@ def load_dataset_from_dir(directory: str | Path, transform: Callable | None = to
     """Return a :class:`MethaneZarrDataset` covering *all* stores in *directory*."""
     paths = get_all_zarr_paths(directory)
     return MethaneZarrDataset(paths, transform=transform)
+
+
+
+
+from pathlib import Path
+import random
+import torch
+from torch.utils.data import Subset, DataLoader, SubsetRandomSampler
+
+
+def get_dataloader(
+    zarr_path: str | Path,
+    batch_size: int = 8,
+    num_workers: int = 4,
+    split: tuple[float, float, float] = (0.7, 0.2, 0.1),
+):
+    dataset = load_dataset_from_dir(zarr_path)
+
+    # ── 1. keep only items with H ≥ 256 ∧ W ≥ 256 ───────────────────────────────
+    good_idx = [
+        i for i in range(len(dataset))
+        if dataset[i][0].shape[-2] >= 256 and dataset[i][0].shape[-1] >= 256
+    ]
+    dataset = Subset(dataset, good_idx)
+
+    # ── 2. load or create split indices ─────────────────────────────────────────
+    idx_file = Path("low_latency_utils") / "indices.txt"
+    idx_file.parent.mkdir(parents=True, exist_ok=True)  # make sure dir exists
+
+    if idx_file.exists():
+        # file already there → reuse split
+        with idx_file.open() as f:
+            lines = [ln.strip() for ln in f.readlines()]
+            train_indices = list(map(int, lines[1].split(", ")))
+            val_indices   = list(map(int, lines[3].split(", ")))
+            test_indices  = list(map(int, lines[5].split(", ")))
+    else:
+        # no file → create new split and save
+        total_len  = len(dataset)
+        train_size = int(total_len * split[0])
+        val_size   = int(total_len * split[1])
+        test_size  = total_len - train_size - val_size
+
+        indices = list(range(total_len))
+        random.shuffle(indices)
+
+        train_indices = indices[:train_size]
+        val_indices   = indices[train_size:train_size + val_size]
+        test_indices  = indices[train_size + val_size:]
+
+        with idx_file.open("w") as f:
+            f.write("Train indices:\n")
+            f.write(", ".join(map(str, train_indices)) + "\n")
+            f.write("Validation indices:\n")
+            f.write(", ".join(map(str, val_indices)) + "\n")
+            f.write("Test indices:\n")
+            f.write(", ".join(map(str, test_indices)) + "\n")
+
+    # ── 3. build samplers & loaders ────────────────────────────────────────────
+    samplers = {
+        "train": SubsetRandomSampler(train_indices),
+        "val"  : SubsetRandomSampler(val_indices),
+        "test" : SubsetRandomSampler(test_indices),
+    }
+
+    train_loader = DataLoader(dataset, batch_size=batch_size, sampler=samplers["train"], num_workers=num_workers)
+    val_loader   = DataLoader(dataset, batch_size=batch_size, sampler=samplers["val"  ], num_workers=num_workers)
+    test_loader  = DataLoader(dataset, batch_size=batch_size, sampler=samplers["test" ], num_workers=num_workers)
+
+    return train_loader, val_loader, test_loader
+
+
 
 
 # -----------------------------------------------------------------------------
