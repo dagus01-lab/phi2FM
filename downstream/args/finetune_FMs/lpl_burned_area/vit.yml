@@ -1,0 +1,38 @@
+
+experiment_name: phi2_vit_cnn_gc/burned_area
+downstream_task: burned_area
+model_name: vit_cnn_gc
+augmentations: True
+batch_size: 32
+model_device: cuda
+generator_device: cuda
+num_workers: 16
+early_stop: 15
+epochs: 200
+input_channels: 10
+output_channels: 4
+input_size: 128
+lr: 0.0001
+lr_scheduler: reduce_on_plateau
+n_shot: [50, 100, 500, 1000, 5000] #null # ok?
+split_ratio: 1.
+regions: null
+vis_val: True
+warmup: True
+warmp_steps: 5
+warmup_gamma: 10
+min_lr: null
+pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/phisat2_fm/pretrained_weights/MaskedAutoencoderGroupChannelViT_ckpt.pt # **********************************
+freeze_pretrained: True
+data_path_128_10m: /Data/lpl_burned_area/burned.zarr
+data_path_224_10m: /Data/lpl_burned_area/burned.zarr
+data_path_224_30m: /Data/lpl_burned_area/burned.zarr
+train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
+downstream_model_path: null
+data_path_inference_128: /Data/lpl_burned_area/burned.zarr
+data_path_inference_224: /Data/lpl_burned_area/burned.zarr
+output_path: /Data/phi2FM_models
+data_parallel: False
+device_ids: [0]
+pad_bands: 10 # 10 for all models, None for phisatnet, 13 for moco and dino
+only_get_datasets: False

@@ -878,8 +878,6 @@ def tabulate_losses(train_log_loss, val_log_loss, climate_segm, perceptual_loss)
 
 
 
-
-
 def visualize_lc(x, y, y_pred=None, images=5, channel_first=False, vmin=0,save_path=None):
     lc_map_names = config_lc.lc_raw_classes
     lc_map = config_lc.lc_model_map
@@ -990,6 +988,188 @@ def visualize_building_classification(x, y, y_pred=None, images=5, channel_first
         plt.savefig(save_path)
     plt.close()
 
+def visualize_burned_area(
+    x,
+    y,
+    y_pred=None,
+    images=5,
+    channel_first=False,
+    num_classes=4,
+    labels=None,
+    save_path=None,
+    threshold=0.5
+):
+    """
+    Visualize pixel-wise segmentation for multi-class burned area.
+    Shows RGB composite and side-by-side true vs. predicted masks per class.
+    """
+    def sigmoid_np(z):
+        return 1.0 / (1.0 + np.exp(-z))
+
+    def render_false_rgb(arr, channel_first):
+        if channel_first:
+            arr = np.transpose(arr, (1, 2, 0))
+        if arr.ndim != 3 or arr.shape[2] < 3:
+            raise ValueError(f"Expected ≥3 bands for RGB, got shape {arr.shape}")
+        # use bands [2,1,0] as pseudo-RGB
+        rgb = arr[:, :, [2, 1, 0]].astype(np.float32)
+        mn, mx = rgb.min(), rgb.max()
+        if mx > mn:
+            rgb = (rgb - mn) / (mx - mn)
+        else:
+            rgb = np.zeros_like(rgb)
+        return rgb
+
+    # convert tensors
+    if isinstance(x, torch.Tensor): x = x.detach().cpu().numpy()
+    if isinstance(y, torch.Tensor): y = y.detach().cpu().numpy()
+    if y_pred is not None and isinstance(y_pred, torch.Tensor): y_pred = y_pred.detach().cpu().numpy()
+
+    N = x.shape[0]
+    images = min(images, N)
+    idxs = random.sample(range(N), images)
+
+    # figure: rows = images, cols = 1 + 2*num_classes
+    fig, axs = plt.subplots(images, 1 + 2*num_classes,
+                             figsize=(2 + 2*num_classes, 3*images))
+    if images == 1:
+        axs = np.expand_dims(axs, 0)
+
+    for row, i in enumerate(idxs):
+        # RGB image
+        rr = x[i]
+        rgb = render_false_rgb(rr, channel_first)
+        axs[row, 0].imshow(rgb)
+        axs[row, 0].axis('off')
+        axs[row, 0].set_title(f"Sample {i}")
+
+        H, W = rgb.shape[:2]
+
+        # prepare true masks as (C, H, W)
+        raw_true = y[i]
+        if raw_true.ndim == 2:  # integer mask
+            true_chw = np.stack([(raw_true==c).astype(float) for c in range(num_classes)], 0)
+        elif raw_true.ndim ==3 and raw_true.shape[0]==num_classes:
+            true_chw = raw_true
+        elif raw_true.ndim==3 and raw_true.shape[2]==num_classes:
+            true_chw = np.transpose(raw_true, (2,0,1))
+        else:
+            raise ValueError(f"Invalid y shape {raw_true.shape}")
+
+        # prepare pred masks
+        if y_pred is not None:
+            raw_pred = y_pred[i]
+            if raw_pred.ndim==2:
+                pred_chw = np.stack([(raw_pred==c).astype(float) for c in range(num_classes)], 0)
+            elif raw_pred.ndim==3 and raw_pred.shape[0]==num_classes:
+                pred_chw = raw_pred
+            elif raw_pred.ndim==3 and raw_pred.shape[2]==num_classes:
+                pred_chw = np.transpose(raw_pred, (2,0,1))
+            else:
+                raise ValueError(f"Invalid y_pred shape {raw_pred.shape}")
+            # if logits/probs
+            if pred_chw.dtype.kind=='f':
+                pred_chw = (sigmoid_np(pred_chw)>threshold).astype(float)
+        else:
+            pred_chw = np.zeros_like(true_chw)
+
+        # plot masks
+        for c in range(num_classes):
+            ax_t = axs[row, 1 + c]
+            ax_t.imshow(true_chw[c], cmap='gray', vmin=0, vmax=1)
+            ax_t.axis('off')
+            tlabel = labels[c] if labels else str(c)
+            ax_t.set_title(f"T:{tlabel}", fontsize=8)
+
+            ax_p = axs[row, 1 + num_classes + c]
+            ax_p.imshow(pred_chw[c], cmap='gray', vmin=0, vmax=1)
+            ax_p.axis('off')
+            ax_p.set_title(f"P:{tlabel}", fontsize=8)
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=200)
+        plt.close(fig)
+
+def visualize_fire(
+    x,
+    y,
+    y_pred=None,
+    images=5,
+    channel_first=False,
+    labels=None,
+    save_path=None
+):
+    """
+    Visualize classification predictions for satellite images with multiple bands.
+    """
+    def render_false_rgb(arr, channel_first):
+        if channel_first:
+            arr = np.transpose(arr, (1, 2, 0))  # (H, W, C)
+        if arr.shape[2] < 3:
+            raise ValueError(f"Expected ≥3 channels, got {arr.shape[2]}")
+
+        # Use channels 3, 2, 1 (assuming 0-based indexing) as RGB (pseudo-natural)
+        rgb = arr[:, :, [2, 1, 0]].astype(np.float32)
+
+        # Normalize to [0, 1]
+        mn, mx = rgb.min(), rgb.max()
+        if mx > mn:
+            rgb = (rgb - mn) / (mx - mn)
+        else:
+            rgb = np.zeros_like(rgb)
+        return rgb
+
+    # Convert tensors to numpy
+    if isinstance(x, torch.Tensor): x = x.cpu().numpy()
+    if isinstance(y, torch.Tensor): y = y.cpu().numpy()
+    if y_pred is not None and isinstance(y_pred, torch.Tensor): y_pred = y_pred.cpu().numpy()
+
+    N = x.shape[0]
+    images = min(images, N)
+    indexes = random.sample(range(N), images)
+
+    fig, axs = plt.subplots(images, 2, figsize=(10, 4 * images))
+    if images == 1:
+        axs = np.expand_dims(axs, axis=0)
+
+    for row_idx, i in enumerate(indexes):
+        arr = x[i]
+        try:
+            img_rgb = render_false_rgb(arr, channel_first)
+        except Exception as e:
+            print(f"Skipping image {i}: {e}")
+            continue
+
+        axs[row_idx, 0].imshow(img_rgb)
+        axs[row_idx, 0].axis("off")
+        axs[row_idx, 0].set_title(f"Image #{i}")
+
+        true_label = y[i]
+        pred_label = None
+        if y_pred is not None:
+            probs = y_pred[i]
+            if probs.ndim == 1 and (probs.min() < 0 or probs.max() > 1):
+                probs = np.exp(probs - np.max(probs))
+                probs = probs / probs.sum()
+            pred_label = int(np.argmax(probs))
+
+        true_str = labels[true_label.astype(np.int64)] if labels else f"Class {true_label}"
+        pred_str = labels[pred_label] if (pred_label is not None and labels) else f"Class {pred_label}" if pred_label is not None else "N/A"
+
+        label_text = f"True: {true_str}\nPred: {pred_str}"
+        axs[row_idx, 1].text(0.5, 0.5, label_text, ha='center', va='center', fontsize=12)
+        axs[row_idx, 1].axis("off")
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=200)
+        plt.close(fig)
+    else:
+        plt.show()
+
+
+
 
 def visualize_lc_classification(
     x, 
@@ -1077,7 +1257,7 @@ def visualize_lc_classification(
             pred = np.zeros(num_classes)
 
         header = [f"{j}\n{labels[j]}" if labels else f"Class\n{j}" for j in range(num_classes)]
-        
+        print(f"{x.shape}, {y.shape}, {indexes}")
         true_row = ["X" if y[idx][j] > 0 else "" for j in range(num_classes)]
         pred_row = ["X" if pred[j] > threshold else "" for j in range(num_classes)]
 

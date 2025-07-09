@@ -83,7 +83,7 @@ MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contra
 MODELS_224_r30 = ['prithvi', 'prithvi_classifier']
 
 MODEL_LIST = CNN_LIST + MIXER_LIST + VIT_LIST + CNN_PRETRAINED_LIST + VIT_CNN_LIST + VIT_CNN_PRETRAINED_LIST
-DOWNSTREAM_LIST = ['lc', 'building', 'roads', 'lc_classification', 'building_classification', 'roads_classification']
+DOWNSTREAM_LIST = ['lc', 'building', 'roads', 'lc_classification', 'building_classification', 'roads_classification', 'fire', 'burned_area', 'worldfloods', 'clouds']
 
 
 def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_scheduler, warmup, early_stop, dl_train,
@@ -139,9 +139,42 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
                                                            save_info_vars=save_info_vars)
+        elif downstream_task == 'fire':
+            print(f"yes: {model_name}")
+            trainer = training_loops.TrainClassificationFire(epochs=epochs, lr=lr, model=model, device=device,
+                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           train_loader=dl_train,
+                                                           val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
+                                                           out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
+                                                           warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
+        elif downstream_task == 'burned_area':
+            trainer = training_loops.TrainSegmentationBurned(epochs=epochs, lr=lr, model=model, device=device,
+                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           train_loader=dl_train,
+                                                           val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
+                                                           out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
+                                                           warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
+        elif downstream_task == 'cloud':
+            trainer = training_loops.TrainCloudSegmentation(epochs=epochs, lr=lr, model=model, device=device,
+                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           train_loader=dl_train,
+                                                           val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
+                                                           out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
+                                                           warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
+        elif downstream_task == 'worldfloods':
+            trainer = training_loops.TrainSegmentationWorldfloods(epochs=epochs, lr=lr, model=model, device=device,
+                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           train_loader=dl_train,
+                                                           val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
+                                                           out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
+                                                           warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, num_classes=3)
 
     elif model_name in (VIT_LIST):
-        if downstream_task == 'roads' or downstream_task == 'building':
+        if downstream_task == 'roads' or downstream_task == 'building' or downstream_task=='burned_area':
             trainer = training_loops.TrainViT(epochs=epochs, lr=lr, model=model, device=device,
                                               lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop, train_loader=dl_train,
                                               val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
@@ -438,7 +471,7 @@ def get_args():
     parser.add_argument('--model_name', type=str, choices=MODEL_LIST, required=True,
                         help='Select appropriate model')
     parser.add_argument('--lr', type=float, default=0.001, help='Set learning rate')
-    parser.add_argument('--batch_size', type=int, default=16, help='Set batch size')
+    parser.add_argument('--batch_size', type=int, default=8, help='Set batch size')
     parser.add_argument('--epochs', type=int, default=250, help='Set training epochs')
     parser.add_argument('--early_stop', type=int, default=50, help='set training loop patience for early stopping')
     parser.add_argument('--lr_scheduler', type=str, default=None,
@@ -691,13 +724,17 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         'building': 1,
         'building_classification': 5,
         'roads_classification': 2,
-        'coords': 3
+        'coords': 3, 
+        'fire': 4, 
+        'burned_area':4, 
+        'clouds': 2, 
+        'worldfloods': 3
     }
     assert output_channels == task_output_channels[downstream_task], (
         f"{downstream_task} tasks should have {task_output_channels[downstream_task]} output channels, it has {output_channels}."
     )
     assert n_shot is not None or split_ratio is not None, "Please define data partition protocol!"
-    assert isinstance(n_shot, int) ^ isinstance(split_ratio, float), "n_shot cannot be used with split_ratio!"
+    assert isinstance(n_shot, int) ^ isinstance(split_ratio, float) , "n_shot cannot be used with split_ratio!"
 
     # Display partition info
     if world_rank == 0:
@@ -721,73 +758,52 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     by_region = False if downstream_task == 'coords' else True
     pos_weight, weights = None, None
 
-
+    
     # Data partition
     if isinstance(n_shot, int):
         if n_shot == 0:
             n_shot = 1
             train_mode = 'inference'
-        
-        x_train, y_train, x_val, y_val, pos_weight, weights = data_protocol.protocol_fewshot_memmapped(
-            folder=dataset_folder,
-            dst=None,
-            n=n_shot,
-            regions=regions,
-            y=downstream_task,
-            data_selection='create',
-            name=dataset_name,
-            crop_images=crop_images
-        )
+        #x_train, y_train, x_val, y_val, pos_weight, weights = data_protocol.protocol_fewshot_memmapped(
+        #    folder=dataset_folder,
+        #    dst=None,
+        #    n=n_shot,
+        #    regions=regions,
+        #    y=downstream_task,
+        #    data_selection='create',
+        #    name=dataset_name,
+        #    crop_images=crop_images
+        #)
+        additional_params = {'n':n_shot, 'regions':regions, 'y':downstream_task, 'data_selection':'create', 'name':dataset_name,'crop_images':crop_images}
 
     elif isinstance(split_ratio, float):
-        x_train, y_train, x_val, y_val = data_protocol.protocol_split(
-            dataset_folder,
-            split_percentage=split_ratio,
-            regions=regions,
-            y=downstream_task,
-            by_region=by_region
-        )
+        #x_train, y_train, x_val, y_val = data_protocol.protocol_split(
+        #    dataset_folder,
+        #    split_percentage=split_ratio,
+        #    regions=regions,
+        #    y=downstream_task,
+        #    by_region=by_region
+        #)
+        additional_params = {'split_percentage':split_ratio, 'regions':regions, 'y':downstream_task,'by_region':by_region}
 
     # Prepare testset and inference set
-    x_test, y_test = data_protocol.get_testset(
-        folder=dataset_folder,
-        y=downstream_task,
-        crop_images=crop_images,
-        by_region=by_region,
-    )
-    x_inference, y_inference = data_protocol.get_testset(
-        folder=data_path_inference,
-        y=downstream_task,
-        crop_images=crop_images,
-        by_region=by_region
-    )
-
-    # Log shapes of first elements in each dataset
-    if world_rank == 0:
-        print("Dataset protocol:", dataset_name)
-        if len(x_train.array_list) > 0:
-            print("Training set datapoint shape: X -", x_train.array_list[0].shape)
-        else:
-            print("Training dataset is empty.")
-        if len(x_val.array_list) > 0:
-            print("Validation set datapoint shape: X -", x_val.array_list[0].shape)
-        else:
-            print("Validation dataset is empty.")
-        if len(x_test.array_list) > 0:
-            print("Test set datapoint shape: X -", x_test.array_list[0].shape)
-        else:
-            print("Test dataset is empty.")
-        if len(x_inference.array_list) > 0:
-            print("Inference set datapoint shape: X -", x_inference.array_list[0].shape)
-        else:
-            print("Inference dataset is empty.")
+    #x_test, y_test = data_protocol.get_testset(
+    #    folder=dataset_folder,
+    #    y=downstream_task,
+    #    crop_images=crop_images,
+    #    by_region=by_region,
+    #)
+    #x_inference, y_inference = data_protocol.get_testset(
+    #    folder=data_path_inference,
+    #    y=downstream_task,
+    #    crop_images=crop_images,
+    #    by_region=by_region
+    #)
 
     # Create dataloaders
-    dl_train, dl_test, dl_val, dl_inference = load_data.load_data(
-        x_train, y_train,
-        x_val, y_val,
-        x_test, y_test,
-        x_inference, y_inference,
+    print(f'Batch size: {batch_size}')
+    weights, pos_weight, dl_train, dl_test, dl_val, dl_inference= load_data.load_data(
+        dataset_folder,
         with_augmentations=augmentations,
         num_workers=num_workers,
         batch_size=batch_size,
@@ -795,7 +811,36 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         model_name=model_name.split('_')[0],
         device=generator_device,
         pad_bands=pad_bands,
+        crop_images=crop_images, 
+        num_classes=output_channels, 
+        n=n_shot, 
+        weights_dir=downstream_task
     )
+    #print(f"Weight: {weights}, position weight:{pos_weight}")
+        
+    # Log shapes of first elements in each dataset
+    if False:#world_rank == 0:
+        print("Dataset protocol:", dataset_name)
+        if len(dl_train) > 0:
+            x, y = next(iter(dl_train))[0] 
+            print("Training set datapoint shape: X -", x.shape)
+        else:
+            print("Training dataset is empty.")
+        if len(dl_var) > 0:
+            x, y = next(iter(dl_val))[0]
+            print("Validation set datapoint shape: X -", x.shape)
+        else:
+            print("Validation dataset is empty.")
+        if len(dl_test) > 0:
+            x, y = next(iter(dl_test))[0]
+            print("Test set datapoint shape: X -", x.shape)
+        else:
+            print("Test dataset is empty.")
+        if len(dl_inference) > 0:
+            x, y = next(iter(dl_inference))[0]
+            print("Inference set datapoint shape: X -", x.shape)
+        else:
+            print("Inference dataset is empty.")
     
     # Log dataloader sizes and training model
     if world_rank == 0:
@@ -919,7 +964,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
 
 
-
 if __name__ == "__main__":
     
     print('Starting training_script.py')
@@ -939,27 +983,33 @@ if __name__ == "__main__":
 
     # 2. Run main function
     
-    if False:
-        # RUN WITH MULTIPLE N-SHOT AND TASKS
-        # n_shot_list = [5000]
-        n_shot_list = [100]
-        for n_shot in n_shot_list:
-            args.n_shot = n_shot
-            # for freeze_pretrained in [True, False]:
-            for freeze_pretrained in [True]:
-                args.freeze_pretrained = freeze_pretrained
-                if n_shot == 0 and not freeze_pretrained:
-                    continue
-                for downstream_task in ['roads']:
-                # for downstream_task in ['lc', 'lc_classification', 'building', 'roads']:
-                    args.downstream_task = downstream_task
-                    args.output_channels = 1 if 'building' in args.downstream_task or 'roads' in args.downstream_task else 11
-                    args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
+    # RUN WITH MULTIPLE N-SHOT AND TASKS
+    # n_shot_list = [5000]
+    n_shot_list = [50, 100, 500, 1000, 5000]
+    base_exp_name =  args.experiment_name
+    #n_shot_list = [10, 20, 100, 200, 500]
+    for n_shot in n_shot_list:
+        args.n_shot = n_shot
+        for freeze_pretrained in [True, False]:
+        #for freeze_pretrained in [True]:
+            args.freeze_pretrained = freeze_pretrained
+            if freeze_pretrained:
+                prefix="finetuning/"
+            else:
+                prefix="lp/"
+            args.experiment_name = prefix+ base_exp_name
+            # if n_shot == 0 and not freeze_pretrained:
+            #     continue
+        #for downstream_task in ['roads']:
+        # for downstream_task in ['lc', 'lc_classification', 'building', 'roads']:
+        #    args.downstream_task = downstream_task
+        #    args.output_channels = 1 if 'building' in args.downstream_task or 'roads' in args.downstream_task else 11
+        #    args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
+
+            print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")
+            main(**vars(args))
                 
-                    print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")
-                    main(**vars(args))
-                    
-                    args.model_name = args.model_name.replace('_classifier', '')
+            #args.model_name = args.model_name.replace('_classifier', '')
 
     else:
         # JUST RUN WITH YAML ARGS

@@ -179,7 +179,8 @@ class PrithviEncoder(nn.Module):
     def forward(self, x):
         # embed patches
         x = self.patch_embed(x)
-
+        print(x.shape)
+        print(self.pos_embed[:, 1:, :].shape)
         # add pos embed w/o cls token
         x = x + self.pos_embed[:, 1:, :]
 
