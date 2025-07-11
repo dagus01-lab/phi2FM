@@ -8,7 +8,7 @@ configs=(
     "args/finetune_FMs/worldfloods/phisatnet.yml"
     "args/finetune_FMs/worldfloods/dino.yml"
     "args/finetune_FMs/worldfloods/seco.yml"
-    "args/finetune_FMs/worldfloods/uniphi.yml"
+    #"args/finetune_FMs/worldfloods/uniphi.yml"
     "args/finetune_FMs/worldfloods/gassl.yml"
     "args/finetune_FMs/worldfloods/caco.yml"
     #"args/finetune_FMs/worldfloods/vit.yml"

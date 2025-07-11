@@ -189,10 +189,13 @@ class PhiSatDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict:
         sid, y, x = self._unpack_patch(self.patches[idx])
         sample_group = self.dataset_group[sid]
-        img = sample_group['img'][:]
-        label = self._load_label_array(sample_group['label'])
+        #img = sample_group['img'][:]
+        #label = self._load_label_array(sample_group['label'])
 
-        img, label = self._preprocess(img, label, y, x)
+        img = self._load_zarr_array(sample_group['img'], y, x)
+        label = self._load_zarr_array(sample_group['label'], y, x)
+        
+        img, label = self._preprocess(img, label, x, y)
         sample = {'img': img, 'label': label, 'task': sample_group.attrs.get('task', ''), 'sample_id': sid}
         for key in self.metadata_keys:
             if key in sample_group.attrs:
@@ -206,12 +209,55 @@ class PhiSatDataset(Dataset):
             return patch  # (sid, y, x)
         else:
             return patch, 0, 0
-
-    def _load_label_array(self, ds) -> np.ndarray:
-        # Handle scalar and array labels
+    def _load_zarr_array(self, ds, x: int = 0, y: int = 0) -> np.ndarray:
+        """
+        Read either a full array or a patch from Zarr and always return
+        a 3D ndarray in (C, H, W) format with C>0.
+        """
+        # 1) Scalar → 1×1×1
         if ds.shape == ():
-            return np.array(ds[()])
-        return ds[:]
+            v = np.array(ds[()])
+            return v #.reshape((1, 1, 1))
+
+        # 2) Patch logic
+        if self.patch_size:
+            ph, pw = self.patch_size
+            # raw slice: could be (C,H,W), (H,W,C) or (H,W)
+            if ds.ndim == 3:
+                # detect channel‐first if first dim small
+                C0, D1, D2 = ds.shape
+                if C0 < D1 and C0 < D2:
+                    # CHW
+                    arr = ds[:, y : y + ph, x : x + pw]
+                else:
+                    # HWC
+                    arr = ds[y : y + ph, x : x + pw, :]
+            elif ds.ndim == 2:
+                # grayscale H×W → 1×H×W
+                patch = ds[y : y + ph, x : x + pw]
+                arr = patch[np.newaxis, ...]
+            else:
+                raise ValueError(f"Unexpected ds.ndim={ds.ndim}")
+        else:
+            # full array
+            full = ds[:]
+            if full.ndim == 2:
+                arr = full[np.newaxis, ...]
+            elif full.ndim == 3:
+                # similar detection/transposition
+                C0, D1, D2 = full.shape
+                arr = full 
+            else:
+                raise ValueError(f"Unexpected ds.ndim={full.ndim}")
+
+        # final check
+        # if arr.ndim != 3  or arr.shape[0] == 0:
+        #     raise RuntimeError(f"Bad patch shape {arr.shape} from ds={ds.name}")
+        #print(f"{ds.name}: {ds.shape}")
+        #print(f"{ds.name}: {arr.shape}")
+        arr = self._transpose_if_needed(arr)
+        #print(f"{ds.name}: {arr.shape}")
+        return np.array(arr)
 
 
     def _cluster_and_nshot(self, n_shots: int = 0, n_regions: int = 5, strategy: str = 'stratified', seed: int = 0):
@@ -236,8 +282,15 @@ class PhiSatDataset(Dataset):
         # 1) if we already have the samples file, just load & return
         if os.path.exists(sample_file):
             with open(sample_file, 'r') as f:
-                self.sample_ids = json.load(f)
-            self.patches = self._generate_patches(self.sample_ids)
+                #self.sample_ids = json.load(f)
+                patches =  json.load(f)
+            if self.patch_size:
+                self.patches = [tuple(p) for p in patches]
+                self.sample_ids = [p[0] for p in self.patches]
+            else:
+                self.sample_ids = self.patches
+                self.patches = self._generate_patches(self.sample_ids)
+            #self.patches = self._generate_patches(self.sample_ids)
             if self.verbose:
                 print(f"[INFO] Loaded {len(self.sample_ids)} from {sample_file}")
             return
@@ -351,31 +404,23 @@ class PhiSatDataset(Dataset):
                 final_ids.extend(tmp.patches)
 
         # 5) save the final list
-        self.sample_ids = final_ids
-        self.patches   = self._generate_patches(final_ids)
+        if self.patch_size:
+            self.patches = final_ids
+            self.sample_ids = [p[0] for p in self.patches]
+        else:
+            self.sample_ids = final_ids
+            self.patches = self._generate_patches(final_ids)
         with open(sample_file, 'w') as f:
-            json.dump(self.sample_ids, f, indent=2)
+            json.dump(self.patches, f, indent=2)
         if self.verbose:
             print(f"[INFO] Saved {len(self.sample_ids)} samples to {sample_file}")
-
+    
     def _preprocess(self, img: np.ndarray, label: np.ndarray, y: int, x: int):
-        # Transpose channels if needed
-        img = self._transpose_if_needed(img)
-        label = self._transpose_if_needed(label)
 
         # Squeeze single-channel masks to one-hot
         if label.ndim == 3 and label.shape[-1] == 1:
             lab = torch.from_numpy(label.squeeze(-1)).long()
             label = F.one_hot(lab, num_classes=self.num_classes).numpy()
-
-        # Crop patch
-        if self.patch_size:
-            ph, pw = self.patch_size
-            img = img[y:y+ph, x:x+pw, ...]
-            if label.ndim==3:
-                label = label[y:y+ph, x:x+pw, ...]
-            elif label.ndim==2:
-                label = label[y:y+ph, x:x+pw]
 
         # Optional image cropping
         if self.crop_images:
@@ -485,7 +530,7 @@ class PhiSatDataset(Dataset):
 
         for sid in self.sample_ids:
             ds = self.dataset_group[sid]['label']
-            lbl = self._load_label_array(ds)
+            lbl = self._load_zarr_array(ds)
             cls = self._infer_class_from_label(lbl)
             # skip invalid class indices
             if cls is None or cls < 0 or cls >= self.num_classes:
@@ -524,7 +569,7 @@ class PhiSatDataset(Dataset):
 
         class_to_ids: Dict[int, List] = {c: [] for c in range(self.num_classes)}
         for sid in self.sample_ids:
-            lbl = self._load_label_array(self.dataset_group[sid]['label'])
+            lbl = self._load_zarr_array(self.dataset_group[sid]['label'])
             cls = self._infer_class_from_label(lbl)
             if cls is not None:
                 class_to_ids[cls].append(sid)
@@ -581,7 +626,7 @@ class PhiSatDataset(Dataset):
         class_to_patches: Dict[int, List] = {c: [] for c in range(self.num_classes)}
         for patch in self.patches:
             sid, y, x = self._unpack_patch(patch)
-            lbl = self._load_label_array(self.dataset_group[sid]['label'])
+            lbl = self._load_zarr_array(self.dataset_group[sid]['label'])
             if self.patch_size:
                 ph, pw = self.patch_size
                 lbl = lbl[y:y+ph, x:x+pw, ...] if lbl.ndim >= 2 else lbl
@@ -744,7 +789,7 @@ def get_zarr_dataloader(
         verbose=verbose, 
         crop_images=crop_images, 
         num_classes=num_classes,
-        #patch_size=(256,256),
+        patch_size=(256,256),
         weights_dir=weights_dir, 
         n_regions=n_regions, 
         n_shot_strategy='stratified'

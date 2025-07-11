@@ -18,6 +18,7 @@ dependencies:
   - python-lmdb
   - tqdm
   - scipy
+  - zarr
   - conda-forge::gdal
   - timm
   - pytorch-lightning

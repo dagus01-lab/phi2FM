@@ -275,9 +275,9 @@ def callback_preprocess_landcover_prithvi(x, y):
 def callback_preprocess_phisatnet(x, y):
     assert x.shape[2] == 8, "Input x must have 8 channels for phisatnet model."
     
-    x = np.sqrt(x)
-    x = np.clip(x, PHISAT_MIN, PHISAT_MAX)
-    x = (x - PHISAT_MEAN) / PHISAT_STD
+    #x = np.sqrt(x)
+    #x = np.clip(x, PHISAT_MIN, PHISAT_MAX)
+    #x = (x - PHISAT_MEAN) / PHISAT_STD
     
     x = x.astype(np.float32, copy=False)
     y = y.astype(np.float32, copy=False)
@@ -601,7 +601,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
         if downstream_task in ['geo', 'lc_classification', 'building_classification', 'roads_regression', 'coords', ]:
             cb_postprocess = callback_postprocess_decoder_geo
             aug = [
-                AugmentationRotation(p=0.2, inplace=True),
+                AugmentationRotation(p=0, inplace=True),
                 AugmentationMirror(p=0.2, inplace=True),
                 # beo.AugmentationCutmix(p=0.2, inplace=True),
                 AugmentationNoiseNormal(p=0.2, inplace=True),
@@ -639,7 +639,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
         #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
         metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
         verbose = False,
-        split = [.8, .2], 
+        split = [.9, .1], 
         callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val],
         callback_post_augmentation = [callback_post_augmentation_training, callback_post_augmentation_val],
         augmentations = [augmentations_training, augmentations_val], 

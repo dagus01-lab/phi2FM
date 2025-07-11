@@ -22,7 +22,7 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/pretrained_models/seco_resnet50_1m.ckpt 
+pretrained_model_path: /home/gdaga/pretrained_weights/seco_resnet50_1m.ckpt 
 freeze_pretrained: True
 data_path_128_10m: /Data/worldfloods/worldfloods.zarr
 data_path_224_10m: /Data/worldfloods/worldfloods.zarr
