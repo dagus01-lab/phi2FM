@@ -56,6 +56,8 @@ PHISAT_STD = np.array([17.06368142, 17.08672835, 20.21215486, 17.8629414, 20.119
 # PHISAT_MEAN = np.array([1884.56169544, 1701.8988641, 1818.49680678, 1856.58051233, 2364.33335501, 1961.68849886, 2294.99146283, 2457.69823862])
 # PHISAT_STD = np.array([1899.72067083, 1743.80445286, 2020.09785262, 1873.41863641, 1924.71680909, 2034.2549607, 1992.56097028, 1996.09805038])
 
+CLOUDS_MEAN = [0, 0, 0, 0, 0, 0, 0, 0]
+CLOUDS_STD = [1, 1, 1, 1, 1, 1, 1, 1]
 
 
 def to_one_hot_lc(y, class_labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])):
@@ -390,6 +392,14 @@ def callback_decoder_phisatnet_lc(x, y):
     x, y = callback_postprocess_decoder(x, y)
     return x, y
     
+def callback_decoder_phisatnet_clouds(x, y):
+    x, y = callback_preprocess(x, y)
+    x = beo.channel_last_to_first(x)
+    if y.ndim > 2:
+        y = beo.channel_last_to_first(y)
+    x = minmax_normalize_image(x)#(x-CLOUDS_MEAN)/CLOUDS_STD #normalize_image_burned_area(x)
+    return torch.from_numpy(x), torch.from_numpy(y)
+    
 def callback_decoder_phisatnet_burned_area(x, y):
     x, y = callback_preprocess(x, y)
     x = beo.channel_last_to_first(x)
@@ -435,6 +445,14 @@ def callback_decoder_burned_area(x, y):
     x = minmax_normalize_image(x) #normalize_image_burned_area(x)
     return torch.from_numpy(x), torch.from_numpy(y)
 
+def callback_decoder_clouds(x, y):
+    x, y = callback_preprocess(x, y)
+    x = beo.channel_last_to_first(x)
+    if y.ndim > 2:
+        y = beo.channel_last_to_first(y)
+    x = minmax_normalize_image(x)#(x - CLOUDS_MEAN ) /CLOUDS_STD
+    return torch.from_numpy(x), torch.from_numpy(y)
+
 def callback_decoder_fire(x, y):
     x, y = callback_preprocess(x, y)
     x = beo.channel_last_to_first(x)
@@ -463,7 +481,20 @@ def callback_decoder_satmae_burned_area(x, y):
     if len(y.shape) > 2:
         y = y[:, 80:-80, 80:-80]
     return torch.from_numpy(x_norm), torch.from_numpy(np.array(y)) #x_norm, y
-    
+
+def callback_decoder_satmae_clouds(x, y):
+    x = pad_bands(x)
+    x_norm = minmax_normalize_image(x)#(x - CLOUDS_MEAN) / CLOUDS_STD
+    y = y.astype(np.float32, copy=False)
+    x_norm = beo.channel_last_to_first(x_norm)
+    x_norm = x_norm[:, 80:-80, 80:-80]
+    #x_norm = x_norm[16:-16, 16:-16, :]
+    if y.ndim > 2:
+        y = beo.channel_last_to_first(y)
+    #if len(y.shape) > 2:
+    #    y = y[16:-16, 16:-16, :]
+    return torch.from_numpy(x_norm), torch.from_numpy(np.array(y))
+
 def callback_decoder_satmae_worldfloods(x, y):
     x = pad_bands(x)
     #x_norm = sentinelNormalize(x)
@@ -492,7 +523,18 @@ def callback_decoder_prithvi_fire(x, y):
     x, y =  callback_decoder_prithvi(x, y)
     x = x[:, 10:-10, 10:-10]
     return x, y
+def callback_decoder_prithvi_clouds(x, y):
+    x = pad_bands(x)
+    x, y =  callback_decoder_prithvi(x, y)
+    x = x[:, 16:-16, 16:-16]
+    x_norm = minmax_normalize_image(x)#(x-CLOUDS_MEAN)/CLOUDS_STD
+    y = y[:, 16:-16, 16:-16]
+    return x_norm, y
 def callback_decoder_prithvi_worldfloods(x, y):
+    x = pad_bands(x)
+    x, y =  callback_decoder_prithvi(x, y)
+    x = x[:, 16:-16, 16:-16]
+    y = y[:, 16:-16, 16:-16]
     return x, y
 def callback_decoder_prithvi_burned_area(x, y):
     x = pad_bands(x)
@@ -521,6 +563,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             cb_decoder = callback_decoder_satmae_fire
         elif downstream_task == 'burned_area' or downstream_task == 'worldfloods':
             cb_decoder = callback_decoder_satmae_burned_area
+        elif downstream_task == 'clouds':
+            cb_decoder = callback_decoder_satmae_clouds
         else:
             cb_decoder = callback_decoder_satmae
     elif model_name == 'prithvi':
@@ -530,6 +574,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             cb_decoder = callback_decoder_prithvi_fire
         elif downstream_task == 'burned_area' or downstream_task == 'worldfloods':
             cb_decoder = callback_decoder_prithvi_burned_area
+        elif downstream_task == "clouds":
+            cb_decoder = callback_decoder_prithvi_clouds
         else:
             cb_decoder = callback_decoder_prithvi
     elif model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
@@ -539,6 +585,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             cb_decoder = callback_decoder_phisatnet_fire
         elif downstream_task == 'burned_area' or downstream_task == 'worldfloods':
             cb_decoder = callback_decoder_phisatnet_burned_area
+        elif downstream_task == "clouds":
+            cb_decoder = callback_decoder_phisatnet_clouds
         else:
             cb_decoder = callback_decoder_phisatnet
     else:
@@ -550,6 +598,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             cb_decoder = callback_decoder_geo
         elif downstream_task == 'burned_area' or downstream_task == 'worldfloods':
             cb_decoder = callback_decoder_burned_area
+        elif downstream_task == "clouds":
+            cb_decoder = callback_decoder_clouds
         elif downstream_task == 'fire':
             cb_decoder = callback_decoder_fire
         else:
@@ -628,56 +678,82 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
     callback_pre_augmentation_inference = None
     callback_post_augmentation_inference = cb_decoder
     augmentations_inference = None
+    
+    if downstream_task == "clouds":
+        weight, pos_weight, dl_train, dl_val, dl_test = get_zarr_dataloader(
+            zarr_path=dataset_path,                     # Path to the Zarr archive
+            dataset_set="trainval",                 # Dataset subset to use
+            batch_size=16,                           # Number of samples per batch
+            shuffle=True,                            # Enable shuffling (useful for training)
+            num_workers=4,                           # Number of parallel workers for loading
+            #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
+            metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
+            verbose = False,
+            split = [.8, .02, .18], 
+            save = True,
+            split_names = ["train", "validation", "test"],
+            callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val, callback_pre_augmentation_test],
+            callback_post_augmentation = [callback_post_augmentation_training, callback_post_augmentation_val, callback_post_augmentation_test],
+            augmentations = [augmentations_training, augmentations_val, augmentations_test], 
+            crop_images= crop_images, 
+            generator= torch.Generator(device), 
+            pin_memory=True, 
+            drop_last=False, 
+            num_classes=num_classes, 
+            n_shot=[n, 0, 0], 
+            weights_dir=weights_dir
+        )
 
-    # import pdb; pdb.set_trace()
-    weight, pos_weight, dl_train, dl_val = get_zarr_dataloader(
-        zarr_path=dataset_path,                     # Path to the Zarr archive
-        dataset_set="trainval",                 # Dataset subset to use
-        batch_size=16,                           # Number of samples per batch
-        shuffle=True,                            # Enable shuffling (useful for training)
-        num_workers=4,                           # Number of parallel workers for loading
-        #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
-        metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
-        verbose = False,
-        split = [.9, .1], 
-        callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val],
-        callback_post_augmentation = [callback_post_augmentation_training, callback_post_augmentation_val],
-        augmentations = [augmentations_training, augmentations_val], 
-        crop_images= crop_images, 
-        generator= torch.Generator(device), 
-        pin_memory=True, 
-        drop_last=False, 
-        num_classes=num_classes, 
-        n_shot=[n, 0], 
-        weights_dir=weights_dir
-    )
+        dl_inference = dl_test
+    
+    else:
+        # import pdb; pdb.set_trace()
+        weight, pos_weight, dl_train, dl_val = get_zarr_dataloader(
+            zarr_path=dataset_path,                     # Path to the Zarr archive
+            dataset_set="trainval",                 # Dataset subset to use
+            batch_size=16,                           # Number of samples per batch
+            shuffle=True,                            # Enable shuffling (useful for training)
+            num_workers=4,                           # Number of parallel workers for loading
+            #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
+            metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
+            verbose = False,
+            split = [.9, .1], 
+            callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val],
+            callback_post_augmentation = [callback_post_augmentation_training, callback_post_augmentation_val],
+            augmentations = [augmentations_training, augmentations_val], 
+            crop_images= crop_images, 
+            generator= torch.Generator(device), 
+            pin_memory=True, 
+            drop_last=False, 
+            num_classes=num_classes, 
+            n_shot=[n, 0], 
+            weights_dir=weights_dir
+        )
 
-    _, _, dl_test = get_zarr_dataloader(
-        zarr_path=dataset_path,                     # Path to the Zarr archive
-        dataset_set="test",                 # Dataset subset to use
-        batch_size=16,                           # Number of samples per batch
-        shuffle=True,                            # Enable shuffling (useful for training)
-        num_workers=4,                           # Number of parallel workers for loading
-        #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
-        metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
-        verbose = False,
-        split = None, 
-        callback_pre_augmentation = callback_pre_augmentation_test,
-        callback_post_augmentation = callback_post_augmentation_test,
-        augmentations = augmentations_test,
-        crop_images= crop_images, 
-        generator= torch.Generator(device), 
-        pin_memory=True, 
-        drop_last=False, 
-        num_classes=num_classes, 
-        n_shot=0, 
-        weights_dir=None
-    ) 
-    dl_inference = dl_test
+        _, _, dl_test = get_zarr_dataloader(
+            zarr_path=dataset_path,                     # Path to the Zarr archive
+            dataset_set="test",                 # Dataset subset to use
+            batch_size=16,                           # Number of samples per batch
+            shuffle=True,                            # Enable shuffling (useful for training)
+            num_workers=4,                           # Number of parallel workers for loading
+            #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
+            metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
+            verbose = False,
+            split = None, 
+            callback_pre_augmentation = callback_pre_augmentation_test,
+            callback_post_augmentation = callback_post_augmentation_test,
+            augmentations = augmentations_test,
+            crop_images= crop_images, 
+            generator= torch.Generator(device), 
+            pin_memory=True, 
+            drop_last=False, 
+            num_classes=num_classes, 
+            n_shot=0, 
+            weights_dir=None
+        ) 
+        dl_inference = dl_test
 
     return weight, pos_weight, dl_train, dl_test, dl_val, dl_inference
-
-
 
 
 

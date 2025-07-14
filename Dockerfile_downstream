@@ -1,0 +1,44 @@
+#FROM debian:latest
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+# Install prerequisites for Miniconda installation
+RUN apt-get update && \
+    apt-get install -y wget bzip2 ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Miniconda
+ENV CONDA_DIR=/opt/conda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh \
+    && mkdir -p "$CONDA_DIR" \
+    && bash /tmp/miniconda.sh -b -f -p "$CONDA_DIR" \
+    && rm /tmp/miniconda.sh
+
+# Ensure conda is on PATH
+ENV PATH="$CONDA_DIR/bin:$PATH"
+
+WORKDIR /app
+COPY . /app/phi2FM
+RUN mkdir /app/pretrained_weights
+#COPY pretrained_weights/ /app/pretrained_weights/
+
+# Create the conda environment from the YAML file
+# Replace 'environment.yaml' with your actual filename if different
+RUN conda env create -f ./phi2FM/environment.yml
+
+# Enable conda environment activation in subsequent RUN/SHELL commands
+ENV PYTHONENV=/app/phi2FM
+ENV CLOUDS_DATASET_PATH=/app/clouds.zarr
+ENV FIRE_DATASET_PATH=/app/fire.zarr
+ENV WORLDFLOODS_DATASET_PATH=/app/worldfloods.zarr
+ENV BURNED_AREA_DATASET_PATH=/app/burned_area.zarr
+
+ENV OUTPUT_PATH=/app/phi2FM_finetuning
+ENV PRETRAINED_MODEL_DIRECTORY=/app/pretrained_weights
+
+SHELL ["conda", "run", "-n", "$(basename $(head -n1 phi2FM/environment.yaml | cut -d: -f2 | tr -d ' '))", "/bin/bash", "-c"]
+ENV PYTHONENV=/app/phi2FM
+ENV PYTHONUNBUFFERED=1
+
+# SHELL ["/bin/bash", "-i", "--login", "-c"]
+# Afterwards, RUN commands will see the conda initialization
+WORKDIR /app/phi2FM/downstream
+CMD bash export PYTHONPATH=/app/phi2FM && conda run -n esa-phisatnet ./bash_finetuning_clouds.sh

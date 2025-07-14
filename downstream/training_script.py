@@ -727,7 +727,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         'coords': 3, 
         'fire': 4, 
         'burned_area':4, 
-        'clouds': 2, 
+        'clouds': 5, 
         'worldfloods': 3
     }
     assert output_channels == task_output_channels[downstream_task], (
@@ -964,6 +964,40 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
 
 
+def override_paths_with_env(args_dict):
+    downstream_task = args_dict.get('downstream_task', '').upper()
+
+    # 1. Override data paths
+    keys_to_override = [
+        'data_path_128_10m',
+        'data_path_224_10m',
+        'data_path_224_30m',
+        'data_path_inference_128',
+        'data_path_inference_224',
+    ]
+    for key in keys_to_override:
+        env_key = f"{downstream_task}_DATASET_PATH".upper()
+        env_val = os.environ.get(env_key)
+        if env_val:
+            print(f"[INFO] Overriding {key} with ENV value: {env_val}")
+            args_dict[key] = env_val
+
+    # 2. Override output_path
+    env_out = os.environ.get("OUTPUT_PATH")
+    if env_out:
+        print(f"[INFO] Overriding output_path with ENV value: {env_out}")
+        args_dict["output_path"] = env_out
+
+    # 3. Override pretrained_model_path directory
+    pre_path = args_dict.get("pretrained_model_path")
+    env_pre_dir = os.environ.get("PRETRAINED_MODEL_DIRECTORY")
+    if pre_path and env_pre_dir:
+        fname = os.path.basename(pre_path)
+        new_path = os.path.join(env_pre_dir, fname)
+        print(f"[INFO] Replacing pretrained_model_path with: {new_path}")
+        args_dict["pretrained_model_path"] = new_path
+
+    return args_dict
 if __name__ == "__main__":
     
     print('Starting training_script.py')
@@ -978,6 +1012,7 @@ if __name__ == "__main__":
     if args_yaml.read_yaml is not None:
         # print(f"WARNING: overwriting all parameters with defaults stored in {args_yaml.read_yaml}")
         args = read_yaml(args_yaml.read_yaml)
+        args = override_paths_with_env(vars(args))
     else:
         args = parser.parse_args()
 

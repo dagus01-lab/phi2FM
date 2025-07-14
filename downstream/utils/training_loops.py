@@ -1487,14 +1487,19 @@ class TrainCloudSegmentation(TrainSegmentationBurned):
     
     def val_visualize(self, images, labels, outputs, name):
         # Visualize binary segmentation results
-        visualize.visualize_lc_classification(
-            x=images, 
-            y=labels, 
-            y_pred=outputs, 
+        outputs_tensor = torch.from_numpy(outputs)  # now a FloatTensor [B, C, H, W]
+        outputs_labels = torch.argmax(outputs_tensor, dim=1)  # [B, H, W]
+        labels_tensor = torch.from_numpy(labels)
+        y_labels = torch.argmax(labels_tensor, dim=1)  # [B, H, W]
+        #outputs_labels = torch.argmax(outputs, dim=1)  # [B, H, W] class indices
+        visualize.visualize_burned_area(
+            x=images,
+            y=y_labels,      # labels to class indices for visualization
+            y_pred=outputs_labels.cpu().numpy(),
             images=5,
             channel_first=True,
-            num_classes=2,
-            labels=['No cloud', 'Cloud'],
+            num_classes=5,
+            labels=['No cloud', 'Cloud', 'value2', 'value3', 'value4'],
             save_path=f"{self.out_folder}/{name}.png"
         )
     def get_metrics(self, images=None, labels=None, running_metric=None, k=None):

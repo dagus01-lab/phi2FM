@@ -56,6 +56,11 @@ class AugmentationRotationXY:
 
         return img_rot.copy(), label_rot.copy()
 
+def convert_to_tensor(x):
+    if isinstance(x, np.ndarray):
+        return torch.from_numpy(x).float()
+    elif isinstance(x, torch.Tensor):
+        return x.to(dtype=torch.float32)
 class AugmentationMirrorXY:
     def __init__(self, p=0.5, inplace=False):
         self.p = p
@@ -177,7 +182,11 @@ class PhiSatDataset(Dataset):
                 h, w = img.shape[1:] if img.ndim == 3 else img.shape[2:]
                 for y in range(0, h, ph):
                     for x in range(0, w, pw):
-                        if y + ph <= h and x + pw <= w:
+                        # if y + ph <= h and x + pw <= w:
+                        #     patches.append((sid, y, x))
+                        patch_h = min(ph, h - y)
+                        patch_w = min(pw, w - x)
+                        if patch_h == self.patch_size[0] and patch_w == self.patch_size[1]:
                             patches.append((sid, y, x))
             return patches
         else:
@@ -194,8 +203,8 @@ class PhiSatDataset(Dataset):
 
         img = self._load_zarr_array(sample_group['img'], y, x)
         label = self._load_zarr_array(sample_group['label'], y, x)
-        
         img, label = self._preprocess(img, label, x, y)
+        
         sample = {'img': img, 'label': label, 'task': sample_group.attrs.get('task', ''), 'sample_id': sid}
         for key in self.metadata_keys:
             if key in sample_group.attrs:
@@ -418,9 +427,26 @@ class PhiSatDataset(Dataset):
     def _preprocess(self, img: np.ndarray, label: np.ndarray, y: int, x: int):
 
         # Squeeze single-channel masks to one-hot
+        
         if label.ndim == 3 and label.shape[-1] == 1:
             lab = torch.from_numpy(label.squeeze(-1)).long()
+            #print(self.num_classes)
+            #print(lab.shape)
+            #label = F.one_hot(lab, num_classes=self.num_classes).numpy()
+        try:
             label = F.one_hot(lab, num_classes=self.num_classes).numpy()
+        except RuntimeError as e:
+            print("RuntimeError during one-hot encoding:", e)
+            print("Unique label values found:", torch.unique(lab))
+            
+            # Optional: print out specific problematic indices
+            invalid_mask = (lab >= self.num_classes) | (lab < 0)
+            if invalid_mask.any():
+                invalid_indices = torch.nonzero(invalid_mask, as_tuple=False)
+                print(f"Invalid class values (not in [0, {self.num_classes - 1}]):")
+                for idx in invalid_indices:
+                    print(f"   At position {tuple(idx.tolist())} -> value: {lab[tuple(idx.tolist())].item()}")
+            raise  # Re-raise to let the calling code handle or crash as needed            
 
         # Optional image cropping
         if self.crop_images:
@@ -437,7 +463,7 @@ class PhiSatDataset(Dataset):
         if self.callback_post_augmentation:
             img, label = self.callback_post_augmentation(img, label)
 
-        return img, label
+        return convert_to_tensor(img), convert_to_tensor(label)
 
     def _load_or_compute_weights(self) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -506,8 +532,11 @@ class PhiSatDataset(Dataset):
 
         # 5) Plain 2D mask
         if isinstance(lbl, np.ndarray) and lbl.ndim == 2:
-            vals, counts = np.unique(lbl, return_counts=True)
-            return int(vals[np.argmax(counts)])
+            try:
+                vals, counts = np.unique(lbl, return_counts=True)
+                return int(vals[np.argmax(counts)])
+            except Exception as e:
+                return None
 
         # Otherwise we don’t know how to interpret it
         return None
@@ -553,39 +582,60 @@ class PhiSatDataset(Dataset):
         pos_weights = torch.from_numpy((neg / pos).astype(np.float32))
         return class_weights, pos_weights
 
-    def split_by_percentages(self, split: List[float]) -> List['PhiSatDataset']:
+    def split_by_percentages(self, split: List[float], split_names: List[str]) -> List['PhiSatDataset']:
         """
         Splits the dataset into subsets according to specified percentages, 
         while maintaining class distribution as best as possible.
     
         Args:
             split (List[float]): A list of floats that sum to 1.0, indicating split ratios.
-    
+            split_names (List[str]): A list of strings that represent the names of the splits
         Returns:
             List[PhiSatDataset]: A list of new PhiSatDataset instances representing each subset.
         """
         if not np.isclose(sum(split), 1.0):
             raise ValueError("Split percentages must sum to 1.0")
 
-        class_to_ids: Dict[int, List] = {c: [] for c in range(self.num_classes)}
-        for sid in self.sample_ids:
-            lbl = self._load_zarr_array(self.dataset_group[sid]['label'])
-            cls = self._infer_class_from_label(lbl)
-            if cls is not None:
-                class_to_ids[cls].append(sid)
+        # Try loading predefined splits from JSONs
+        predefined = {}
+        for name in split_names:
+            path = os.path.join(self.weights_dir, f"{name}.json")
+            if os.path.isfile(path):  # reliable check for file existence :contentReference[oaicite:1]{index=1}
+                with open(path, "r") as f:
+                    sample_list = json.load(f)
+                    predefined[name] = sample_list
 
-        subsets: List[List[str]] = [[] for _ in split]
-        for cls, ids in class_to_ids.items():
-            rng = random.Random(0)
-            rng.shuffle(ids)
-            n = len(ids)
-            sizes = [int(r * n) for r in split]
-            sizes[-1] = n - sum(sizes[:-1])
-            start = 0
-            for i, size in enumerate(sizes):
-                subsets[i].extend(ids[start:start+size])
-                start += size
+        if len(predefined) == len(split_names):
+            # We have all splits predefined, so we use them
+            subsets = [predefined[name] for name in split_names]
+        else:
+            # Fallback: generate splits randomly, stratified by class
+            class_to_ids: Dict[int, List] = {c: [] for c in range(self.num_classes)}
+            for sid in self.sample_ids:
+                lbl = self._load_zarr_array(self.dataset_group[sid]['label'])
+                cls = self._infer_class_from_label(lbl)
+                if cls is not None:
+                    class_to_ids[cls].append(sid)
 
+            subsets = [[] for _ in split]
+            for cls, ids in class_to_ids.items():
+                rng = random.Random(0)
+                rng.shuffle(ids)
+                n = len(ids)
+                sizes = [int(r * n) for r in split]
+                sizes[-1] = n - sum(sizes[:-1])
+                start = 0
+                for i, size in enumerate(sizes):
+                    subsets[i].extend(ids[start:start+size])
+                    start += size
+
+            # Save these new splits to JSON
+            for name, ids in zip(split_names, subsets):
+                path = os.path.join(self.weights_dir, f"{name}.json")
+                with open(path, "w") as f:
+                    json.dump(ids, f, indent=2)
+
+        # Build dataset subsets
         result = []
         for ids in subsets:
             ds = deepcopy(self)
@@ -593,6 +643,7 @@ class PhiSatDataset(Dataset):
             ds.patches = ds._generate_patches(ids)
             result.append(ds)
         return result
+
 
     def get_n_shots(self, strategy: str = 'stratified', n: int= None, seed: Optional[int] = None) -> None:
         """
@@ -751,7 +802,9 @@ def get_zarr_dataloader(
     drop_last: bool = False, 
     n_shot: Union[int, List[int]]= 0, 
     weights_dir: str = None, 
-    n_regions: int = 6
+    n_regions: int = 6, 
+    save:bool = False, 
+    split_names: List[str] = None
     
 ) -> DataLoader:
     """
@@ -799,7 +852,7 @@ def get_zarr_dataloader(
     weights, pos_weights = dataset.class_weights, dataset.pos_weights
     print(f"weights: {weights}, pos_weights:{pos_weights}")
     if not split is None:
-        sub_datasets = dataset.split_by_percentages(split=split)
+        sub_datasets = dataset.split_by_percentages(split=split, split_names = split_names)
         dataloaders = []
         for idx, sub_dataset in enumerate(sub_datasets):
             if n_shot[idx] != 0:
@@ -844,7 +897,7 @@ if __name__ == "__main__":
     
     # Create DataLoader
     weight, pos_weight, dl_train, dl_val = get_zarr_dataloader(
-        zarr_path=dataset_path,                     
+        zarr_path=zarr_path,                     
         dataset_set="trainval",                 
         batch_size=16,                           
         shuffle=True,                            
@@ -855,16 +908,16 @@ if __name__ == "__main__":
         callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val],
         callback_post_augmentation = [callback_post_augmentation_training, callback_post_augmentation_val],
         augmentations = [augmentations_training, augmentations_val], 
-        crop_images= crop_images, 
-        generator= torch.Generator(device), 
+        crop_images= False, 
+        generator= torch.Generator("cuda"), 
         pin_memory=True, 
         drop_last=False, 
         n_shot=[50, 0],
-        num_classes=num_classes
+        num_classes=4
     )
 
     weight, pos_weight, dl_test = get_zarr_dataloader(
-        zarr_path=dataset_path,                     
+        zarr_path=zarr_path,                     
         dataset_set="test",                 
         batch_size=16,                           
         shuffle=True,                            
@@ -875,10 +928,10 @@ if __name__ == "__main__":
         callback_pre_augmentation = callback_pre_augmentation_test,
         callback_post_augmentation = callback_post_augmentation_test,
         augmentations = augmentations_test,
-        crop_images= crop_images, 
-        generator= torch.Generator(device), 
+        crop_images= False, 
+        generator= torch.Generator("cuda"), 
         pin_memory=True, 
         drop_last=False, 
         n_shot=50,
-        num_classes=num_classes
+        num_classes=4
     ) 
