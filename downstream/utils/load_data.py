@@ -416,6 +416,7 @@ def callback_decoder_phisatnet_fire(x, y):
     
 def minmax_normalize_image(x):
     # Normalize each channel to [0, 1]
+    print(x.shape)
     for c in range(x.shape[0]):
         min_val = np.min(x[c])
         max_val = np.max(x[c])
@@ -718,6 +719,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
             verbose = False,
             split = [.9, .1], 
+            split_names = ["train", "validation"],
             callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val],
             callback_post_augmentation = [callback_post_augmentation_training, callback_post_augmentation_val],
             augmentations = [augmentations_training, augmentations_val], 
@@ -740,6 +742,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
             verbose = False,
             split = None, 
+            split_names = ["test"],
             callback_pre_augmentation = callback_pre_augmentation_test,
             callback_post_augmentation = callback_post_augmentation_test,
             augmentations = augmentations_test,

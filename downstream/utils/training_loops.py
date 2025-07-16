@@ -1595,7 +1595,7 @@ class TrainCloudSegmentation(TrainSegmentationBurned):
 
         # If no images/labels are passed, just initialize the confusion matrix
         elif (images is None) and (labels is None):
-            num_classes = 2 # len(config_lc.lc_raw_classes.keys())
+            num_classes = 5 # len(config_lc.lc_raw_classes.keys())
             metric_init = np.zeros((num_classes, num_classes))
             return metric_init
 
@@ -1609,7 +1609,7 @@ class TrainCloudSegmentation(TrainSegmentationBurned):
             #outputs = outputs.argmax(axis=1).flatten()
             #labels = labels.squeeze().flatten()
 
-            num_classes = 2 #len(config_lc.lc_raw_classes.keys())
+            num_classes = 5 #len(config_lc.lc_raw_classes.keys())
             unique_mapping = labels * num_classes + outputs
             bins = torch.bincount(unique_mapping, minlength=num_classes**2)
             cfm = bins.reshape(num_classes, num_classes)

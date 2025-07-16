@@ -161,8 +161,8 @@ class PhiSatDataset(Dataset):
         if self.n_shot > 0:
             self._cluster_and_nshot(n_regions=self.n_regions, strategy=self.n_shot_strategy, seed=SEED) #self.get_n_shots(strategy='stratified', seed=SEED)
 
-    def _generate_patches(self, sample_ids):
-        """
+    def _generate_patches(self, sample_ids, min_bands=50):
+        """_generate_patches
         Generates patch coordinates from the given sample IDs.
         If patching is enabled (via `patch_size`), returns a list of tuples (sample_id, y, x)
         corresponding to top-left coordinates of patches.
@@ -179,15 +179,25 @@ class PhiSatDataset(Dataset):
             ph, pw = self.patch_size
             for sid in sample_ids:
                 img = self.dataset_group[sid]['img']
-                h, w = img.shape[1:] if img.ndim == 3 else img.shape[2:]
+                s0, s1, s2 = img.shape
+                                
+                if s0 < s1 and s0 < s2:
+                    h, w = s1, s2
+                elif s1 < s0 and s1 < s2:
+                    h, w = s0, s2
+                elif s2 < s0 and s2 < s1:
+                    h, w = s0, s1
+                else: 
+                    raise ValueError(f"Invalid image shape in sample {sid}: {img-shape}")
+                #h, w = img.shape[1], img.shape[2]
+                # Iterate over y, x positions
                 for y in range(0, h, ph):
                     for x in range(0, w, pw):
-                        # if y + ph <= h and x + pw <= w:
-                        #     patches.append((sid, y, x))
-                        patch_h = min(ph, h - y)
-                        patch_w = min(pw, w - x)
-                        if patch_h == self.patch_size[0] and patch_w == self.patch_size[1]:
-                            patches.append((sid, y, x))
+                        # Skip if patch would be out-of-bounds or too small
+                        if y + ph > h or x + pw > w:
+                            continue
+                        #print(f"Appended patch at ({x}, {y}) from image {sid} with shape {img.shape}")
+                        patches.append((sid, y, x))
             return patches
         else:
             return list(sample_ids)
@@ -203,7 +213,9 @@ class PhiSatDataset(Dataset):
 
         img = self._load_zarr_array(sample_group['img'], y, x)
         label = self._load_zarr_array(sample_group['label'], y, x)
-        img, label = self._preprocess(img, label, x, y)
+        #print(f"Before preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
+        img, label = self._preprocess(img, label, y, x)
+        #print(f"After preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
         
         sample = {'img': img, 'label': label, 'task': sample_group.attrs.get('task', ''), 'sample_id': sid}
         for key in self.metadata_keys:
@@ -218,7 +230,7 @@ class PhiSatDataset(Dataset):
             return patch  # (sid, y, x)
         else:
             return patch, 0, 0
-    def _load_zarr_array(self, ds, x: int = 0, y: int = 0) -> np.ndarray:
+    def _load_zarr_array(self, ds, y: int = 0, x: int = 0) -> np.ndarray:
         """
         Read either a full array or a patch from Zarr and always return
         a 3D ndarray in (C, H, W) format with C>0.
@@ -238,6 +250,8 @@ class PhiSatDataset(Dataset):
                 if C0 < D1 and C0 < D2:
                     # CHW
                     arr = ds[:, y : y + ph, x : x + pw]
+                elif D1 < C0 and D1 < D2: 
+                    arr = ds[y: y+ph, : , x: x+pw]
                 else:
                     # HWC
                     arr = ds[y : y + ph, x : x + pw, :]
