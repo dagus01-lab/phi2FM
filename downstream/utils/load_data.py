@@ -416,7 +416,7 @@ def callback_decoder_phisatnet_fire(x, y):
     
 def minmax_normalize_image(x):
     # Normalize each channel to [0, 1]
-    print(x.shape)
+    #print(x.shape)
     for c in range(x.shape[0]):
         min_val = np.min(x[c])
         max_val = np.max(x[c])

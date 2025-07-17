@@ -22,7 +22,10 @@ RUN mkdir /app/pretrained_weights
 
 # Create the conda environment from the YAML file
 # Replace 'environment.yaml' with your actual filename if different
-RUN conda env create -f ./phi2FM/environment.yml
+#RUN conda env create -f ./phi2FM/environment.yml
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
+    conda env create -f ./phi2FM/environment.yml    
 
 # Enable conda environment activation in subsequent RUN/SHELL commands
 ENV PYTHONENV=/app/phi2FM
@@ -38,7 +41,6 @@ SHELL ["conda", "run", "-n", "$(basename $(head -n1 phi2FM/environment.yaml | cu
 ENV PYTHONENV=/app/phi2FM
 ENV PYTHONUNBUFFERED=1
 
-# SHELL ["/bin/bash", "-i", "--login", "-c"]
-# Afterwards, RUN commands will see the conda initialization
+# sudo docker run --gpus all --rm -it -v /Data/worldfloods/worldfloods.zarr:/app/worldfloods.zarr -v /home/gdaga/pretrained_weights:/app/pretrained_weights -v /home/gdaga/phi2FM/downstream:/app/phi2FM/downstream dagus01/phi2fm_training bash
 WORKDIR /app/phi2FM/downstream
 CMD bash export PYTHONPATH=/app/phi2FM && conda run -n esa-phisatnet ./bash_finetuning_clouds.sh
