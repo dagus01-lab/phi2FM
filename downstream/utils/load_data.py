@@ -56,10 +56,55 @@ PHISAT_STD = np.array([17.06368142, 17.08672835, 20.21215486, 17.8629414, 20.119
 # PHISAT_MEAN = np.array([1884.56169544, 1701.8988641, 1818.49680678, 1856.58051233, 2364.33335501, 1961.68849886, 2294.99146283, 2457.69823862])
 # PHISAT_STD = np.array([1899.72067083, 1743.80445286, 2020.09785262, 1873.41863641, 1924.71680909, 2034.2549607, 1992.56097028, 1996.09805038])
 
-CLOUDS_MEAN = [0, 0, 0, 0, 0, 0, 0, 0]
-CLOUDS_STD = [1, 1, 1, 1, 1, 1, 1, 1]
+CLOUDS_MEAN = [2117.60571665, 1987.80974726, 2022.81842719 ,2120.21424062 ,2911.67845668,
+ 2194.71261135 ,2753.78395443 ,3041.71995497]
+CLOUDS_STD = [1869.83974235, 1799.78664644, 2007.67687801, 1868.28920311, 1784.30285549,
+ 1957.97660107, 1843.28846356, 1850.14866204]
 
+def normalize_clouds(x):
+    """
+    Normalize an image from the phisatnet clouds dataset using provided mean and std.
+    If x has more channels than stats, extend mean/std using last values.
+    
+    Parameters:
+    - x: np.ndarray of shape (C, H, W)
+    
+    Returns:
+    - normalized x: np.ndarray of same shape
+    """
+    if x.ndim != 3:
+        raise ValueError(f"Input must have shape (C, H, W), got {x.shape}")
+    
+    C, H, W = x.shape
+    mean = CLOUDS_MEAN
+    std = CLOUDS_STD
 
+    # Extend mean/std if needed
+    # if C > len(mean):
+    #     extra = C - len(mean)
+    #     mean = np.concatenate([mean, np.full(extra, 0)])
+    #     std = np.concatenate([std, np.full(extra, 1)])
+    # elif C < len(mean):
+    #     mean = mean[:C]
+    #     std = std[:C]
+
+    mean = np.array(mean)[:, None, None]
+    std = np.array(std)[:, None, None]
+    mean = np.transpose(mean, (1, 2, 0)) # shape (C, 1, 1)
+    std = np.transpose(std, (1, 2, 0))    # shape (C, 1, 1)
+    mean = np.transpose(pad_bands(mean), (2, 0, 1))
+    std = np.transpose(pad_bands(std), (2, 0, 1))
+    return (x - mean) / (std + 1e-6)  
+def callback_decoder_phisatnet_clouds(x, y):
+    #x = (x-CLOUDS_MEAN)/CLOUDS_STD #normalize_image_burned_area(x)
+    x, y = callback_preprocess(x, y)
+    x = beo.channel_last_to_first(x)
+    if y.ndim > 2:
+        y = beo.channel_last_to_first(y)
+    x = normalize_clouds(x) #minmax_normalize_image(x) #(x-CLOUDS_MEAN)/CLOUDS_STD 
+    return torch.from_numpy(x), torch.from_numpy(y)
+    
+    
 def to_one_hot_lc(y, class_labels = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])):
     y_classification = np.isin(class_labels, y).astype(np.float32)
     return y_classification
@@ -392,14 +437,6 @@ def callback_decoder_phisatnet_lc(x, y):
     x, y = callback_postprocess_decoder(x, y)
     return x, y
     
-def callback_decoder_phisatnet_clouds(x, y):
-    x, y = callback_preprocess(x, y)
-    x = beo.channel_last_to_first(x)
-    if y.ndim > 2:
-        y = beo.channel_last_to_first(y)
-    x = minmax_normalize_image(x)#(x-CLOUDS_MEAN)/CLOUDS_STD #normalize_image_burned_area(x)
-    return torch.from_numpy(x), torch.from_numpy(y)
-    
 def callback_decoder_phisatnet_burned_area(x, y):
     x, y = callback_preprocess(x, y)
     x = beo.channel_last_to_first(x)
@@ -447,11 +484,12 @@ def callback_decoder_burned_area(x, y):
     return torch.from_numpy(x), torch.from_numpy(y)
 
 def callback_decoder_clouds(x, y):
+    #x = (x - CLOUDS_MEAN ) /CLOUDS_STD
     x, y = callback_preprocess(x, y)
     x = beo.channel_last_to_first(x)
     if y.ndim > 2:
         y = beo.channel_last_to_first(y)
-    x = minmax_normalize_image(x)#(x - CLOUDS_MEAN ) /CLOUDS_STD
+    x = normalize_clouds(x) #minmax_normalize_image(x) #(x-CLOUDS_MEAN)/CLOUDS_STD
     return torch.from_numpy(x), torch.from_numpy(y)
 
 def callback_decoder_fire(x, y):
@@ -484,10 +522,11 @@ def callback_decoder_satmae_burned_area(x, y):
     return torch.from_numpy(x_norm), torch.from_numpy(np.array(y)) #x_norm, y
 
 def callback_decoder_satmae_clouds(x, y):
+    #x_norm = (x - CLOUDS_MEAN) / CLOUDS_STD
     x = pad_bands(x)
-    x_norm = minmax_normalize_image(x)#(x - CLOUDS_MEAN) / CLOUDS_STD
     y = y.astype(np.float32, copy=False)
-    x_norm = beo.channel_last_to_first(x_norm)
+    x = beo.channel_last_to_first(x)
+    x_norm = normalize_clouds(x) # minmax_normalize_image(x) #(x-CLOUDS_MEAN)/CLOUDS_STD 
     x_norm = x_norm[:, 80:-80, 80:-80]
     #x_norm = x_norm[16:-16, 16:-16, :]
     if y.ndim > 2:
@@ -495,6 +534,7 @@ def callback_decoder_satmae_clouds(x, y):
     #if len(y.shape) > 2:
     #    y = y[16:-16, 16:-16, :]
     return torch.from_numpy(x_norm), torch.from_numpy(np.array(y))
+
 
 def callback_decoder_satmae_worldfloods(x, y):
     x = pad_bands(x)
@@ -525,18 +565,21 @@ def callback_decoder_prithvi_fire(x, y):
     x = x[:, 10:-10, 10:-10]
     return x, y
 def callback_decoder_prithvi_clouds(x, y):
+    #x_norm = (x-CLOUDS_MEAN)/CLOUDS_STD
     x = pad_bands(x)
     x, y =  callback_decoder_prithvi(x, y)
     x = x[:, 16:-16, 16:-16]
-    x_norm = minmax_normalize_image(x)#(x-CLOUDS_MEAN)/CLOUDS_STD
+    x_norm = normalize_clouds(x) #minmax_normalize_image(x) #(x-CLOUDS_MEAN)/CLOUDS_STD
     y = y[:, 16:-16, 16:-16]
     return x_norm, y
+
 def callback_decoder_prithvi_worldfloods(x, y):
     x = pad_bands(x)
     x, y =  callback_decoder_prithvi(x, y)
     x = x[:, 16:-16, 16:-16]
     y = y[:, 16:-16, 16:-16]
     return x, y
+
 def callback_decoder_prithvi_burned_area(x, y):
     x = pad_bands(x)
     x, y =  callback_decoder_prithvi(x, y)

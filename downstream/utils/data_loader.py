@@ -614,7 +614,7 @@ class PhiSatDataset(Dataset):
         predefined = {}
         for name in split_names:
             path = os.path.join(self.weights_dir, f"{name}.json")
-            if os.path.isfile(path):  # reliable check for file existence :contentReference[oaicite:1]{index=1}
+            if os.path.isfile(path):  
                 with open(path, "r") as f:
                     sample_list = json.load(f)
                     predefined[name] = sample_list

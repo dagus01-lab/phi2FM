@@ -38,9 +38,9 @@ ENV OUTPUT_PATH=/app/phi2FM_finetuning
 ENV PRETRAINED_MODEL_DIRECTORY=/app/pretrained_weights
 
 SHELL ["conda", "run", "-n", "$(basename $(head -n1 phi2FM/environment.yaml | cut -d: -f2 | tr -d ' '))", "/bin/bash", "-c"]
+#COPY pretrained_weights /app/pretrained_weights
 ENV PYTHONENV=/app/phi2FM
 ENV PYTHONUNBUFFERED=1
-
 # sudo docker run --gpus all --rm -it -v /Data/worldfloods/worldfloods.zarr:/app/worldfloods.zarr -v /home/gdaga/pretrained_weights:/app/pretrained_weights -v /home/gdaga/phi2FM/downstream:/app/phi2FM/downstream dagus01/phi2fm_training bash
 WORKDIR /app/phi2FM/downstream
-CMD bash export PYTHONPATH=/app/phi2FM && conda run -n esa-phisatnet ./bash_finetuning_clouds.sh
+CMD bash export PYTHONPATH=/app/phi2FM && conda run --live-stream -n esa-phisatnet ./bash_finetuning_clouds.sh

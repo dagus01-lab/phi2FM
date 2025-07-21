@@ -1175,7 +1175,7 @@ class TrainSegmentationBurned(TrainBase):
         ## 4) Now shapes match perfectly: both [B, 4, 65536].
         #loss = self.criterion(outputs_flat, labels_flat)
         #return loss
-    def val_visualize(self, images, labels, outputs, name):
+    def val_visualize(self, images, labels, outputs, name, labels_list=['Background', 'Burned Area', 'Clouds', 'Waterbodies']):
         #print(outputs.shape)
         #print(labels.shape)
         outputs_tensor = torch.from_numpy(outputs)  # now a FloatTensor [B, C, H, W]
@@ -1190,7 +1190,7 @@ class TrainSegmentationBurned(TrainBase):
             images=5,
             channel_first=True,
             #num_classes=4,
-            labels=['Background', 'Burned Area', 'Clouds', 'Waterbodies'],
+            labels=labels_list,
             save_path=f"{self.out_folder}/{name}.png"
         )
     def get_metrics(self, images=None, labels=None, running_metric=None, k=None):
@@ -1481,9 +1481,6 @@ class TrainClassificationFire(TrainClassificationBuildings):
             return confmat.cpu().numpy().astype(np.int64)
 
 class TrainCloudSegmentation(TrainSegmentationBurned):
-    def set_criterion(self):
-        # BCEWithLogitsLoss for binary segmentation
-        return nn.CrossEntropyLoss(torch.tensor(self.weights))
     
     def val_visualize(self, images, labels, outputs, name):
         # Visualize binary segmentation results
@@ -1502,119 +1499,6 @@ class TrainCloudSegmentation(TrainSegmentationBurned):
             labels=['No cloud', 'Cloud', 'value2', 'value3', 'value4'],
             save_path=f"{self.out_folder}/{name}.png"
         )
-    def get_metrics(self, images=None, labels=None, running_metric=None, k=None):
-        # When a confusion matrix is provided, compute the metrics
-        if (running_metric is not None) and (k is not None):
-            
-            confmat = running_metric
-            
-            # Total number of pixels
-            total_pixels = np.sum(confmat)
-
-            # True positives (TP) per class
-            tp_per_class = np.diagonal(confmat)
-            total_tp = tp_per_class.sum()
-
-            # False positives (FP) and false negatives (FN) per class
-            fp_per_class = confmat.sum(axis=0) - tp_per_class
-            fn_per_class = confmat.sum(axis=1) - tp_per_class
-
-            # Precision and recall for each class
-            precision_per_class = tp_per_class / (fp_per_class + tp_per_class + 1e-12)
-            recall_per_class    = tp_per_class / (fn_per_class + tp_per_class + 1e-12)
-
-            # Micro-level precision and recall
-            precision_micro = total_tp / (fp_per_class.sum() + total_tp + 1e-12)
-            recall_micro    = total_tp / (fn_per_class.sum() + total_tp + 1e-12)
-
-            # Macro-level precision and recall (simple mean)
-            precision_macro = np.mean(precision_per_class)
-            recall_macro    = np.mean(recall_per_class)
-
-            # Accuracy across all pixels
-            acc_total = total_tp / (total_pixels + 1e-12)
-
-            # -----------------------------
-            #  Compute F1-scores
-            # -----------------------------
-            # Per-class F1
-            f1_per_class = 2 * (precision_per_class * recall_per_class) / (
-                precision_per_class + recall_per_class + 1e-12
-            )
-            # Macro-F1 (average F1 across classes)
-            f1_macro = np.mean(f1_per_class)
-            # Micro-F1 (global precision & recall)
-            f1_micro = 2 * precision_micro * recall_micro / (precision_micro + recall_micro + 1e-12)
-
-            # -----------------------------
-            #  Compute MCC (Matthews Correlation Coefficient)
-            # -----------------------------
-            # For each class, treating it as a one-vs-all problem:
-            tn_per_class = total_pixels - (tp_per_class + fp_per_class + fn_per_class)
-            mcc_per_class = (tp_per_class * tn_per_class - fp_per_class * fn_per_class) / (
-                np.sqrt((tp_per_class + fp_per_class) * (tp_per_class + fn_per_class) *
-                        (tn_per_class + fp_per_class) * (tn_per_class + fn_per_class)) + 1e-12
-            )
-
-            # Macro-average MCC: simple mean of per-class MCCs
-            mcc_macro = np.mean(mcc_per_class)
-            # Weighted-average MCC: weight each class by its support (total true pixels for that class)
-            support = confmat.sum(axis=1)  # true occurrences per class
-            mcc_weighted = np.sum(mcc_per_class * support) / (support.sum() + 1e-12)
-
-            # Micro-average MCC: computed using the multi-class MCC formula
-            # c = sum(diagonal) and s = total samples
-            s = total_pixels
-            c = total_tp
-            p = confmat.sum(axis=0)  # predicted totals per class
-            t = confmat.sum(axis=1)  # true totals per class
-            mcc_micro = (c * s - np.sum(p * t)) / (np.sqrt((s**2 - np.sum(p**2)) * (s**2 - np.sum(t**2))) + 1e-12)
-
-            # -----------------------------
-            #  Collate final metrics
-            # -----------------------------
-            final_metrics = {
-                'acc': acc_total,
-                'precision_per_class': precision_per_class.tolist(),
-                'recall_per_class': recall_per_class.tolist(),
-                'precision_micro': precision_micro,
-                'precision_macro': precision_macro,
-                'recall_micro': recall_micro,
-                'recall_macro': recall_macro,
-                'f1_per_class': f1_per_class.tolist(),
-                'f1_micro': f1_micro,
-                'f1_macro': f1_macro,
-                'mcc_per_class': mcc_per_class.tolist(),
-                'mcc_macro': mcc_macro,
-                'mcc_weighted': mcc_weighted,
-                'mcc_micro': mcc_micro,
-                'conf_mat': confmat.tolist()
-            }
-
-            return final_metrics
-
-        # If no images/labels are passed, just initialize the confusion matrix
-        elif (images is None) and (labels is None):
-            num_classes = 5 # len(config_lc.lc_raw_classes.keys())
-            metric_init = np.zeros((num_classes, num_classes))
-            return metric_init
-
-        # Otherwise, compute the confusion matrix from model predictions
-        else:
-            outputs = self.model(images)
-            outputs = torch.argmax(outputs, dim=1).long()
-            labels = torch.argmax(labels, dim=1).long()
-            print(outputs.shape)
-            print(labels.shape)
-            #outputs = outputs.argmax(axis=1).flatten()
-            #labels = labels.squeeze().flatten()
-
-            num_classes = 5 #len(config_lc.lc_raw_classes.keys())
-            unique_mapping = labels * num_classes + outputs
-            bins = torch.bincount(unique_mapping, minlength=num_classes**2)
-            cfm = bins.reshape(num_classes, num_classes)
-            
-            return cfm.cpu().numpy()
             
 class TrainViT(TrainBase):
     def get_loss(self, images, labels):
