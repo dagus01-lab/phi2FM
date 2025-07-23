@@ -156,10 +156,10 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
                                                            save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
-        elif downstream_task == 'cloud':
+        elif downstream_task == 'clouds':
             trainer = training_loops.TrainCloudSegmentation(epochs=epochs, lr=lr, model=model, device=device,
                                                            lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
-                                                           train_loader=dl_train,
+                                                           train_loader=dl_train, num_classes=5,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,

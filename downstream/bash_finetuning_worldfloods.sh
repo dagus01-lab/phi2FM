@@ -5,7 +5,7 @@
 configs=(
     #"args/finetune_FMs/worldfloods/geoaware.yml"
     #"args/finetune_FMs/worldfloods/moco.yml"
-    "args/finetune_FMs/worldfloods/phisatnet.yml"
+    #"args/finetune_FMs/worldfloods/phisatnet.yml"
     "args/finetune_FMs/worldfloods/dino.yml"
     "args/finetune_FMs/worldfloods/seco.yml"
     #"args/finetune_FMs/worldfloods/uniphi.yml"

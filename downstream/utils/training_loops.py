@@ -1326,7 +1326,7 @@ class TrainSegmentationWorldfloods(TrainSegmentationBurned):
             images=5,
             channel_first=True,
             num_classes=3,
-            labels=['Land', 'Water', 'Clouds'],
+            labels=['Clouds', 'Land', 'Water'],
             save_path=f"{self.out_folder}/{name}.png"
         )
 class TrainClassificationFire(TrainClassificationBuildings):

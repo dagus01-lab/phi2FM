@@ -733,7 +733,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
             metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
             verbose = False,
-            split = [.8, .02, .18], 
+            split = [.7, .1, .2], 
             save = True,
             split_names = ["train", "validation", "test"],
             callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val, callback_pre_augmentation_test],
