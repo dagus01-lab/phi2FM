@@ -22,6 +22,7 @@ import random
 from torchvision import transforms
 import math
 import torch.nn.functional as F
+from typing import Tuple, Optional
 
 
 # statistics used to normalize images before passing to the model
@@ -260,7 +261,7 @@ def callback_preprocess_satmae(x, y):
 def callback_preprocess_prithvi(x, y):
     # order S2 bands: 0-B02, 1-B03, 2-B04, 3-B08, 4-B05, 5-B06, 6-B07, 7-B8A, 8-B11, 9-B12
     # HLS bands: 0-B02, 1-B03, 2-B04, 4-B05, 5-B06, 6-B07,
-    #print(x.shape)
+    # print(x.shape)
     if PROCESS_PHISAT == 10:
         x = x[:, :, (0, 1, 2, 5, 6, 7)] 
     else:
@@ -322,7 +323,7 @@ def callback_preprocess_landcover_prithvi(x, y):
 def callback_preprocess_phisatnet(x, y):
     assert x.shape[2] == 8, "Input x must have 8 channels for phisatnet model."
     
-    #x = np.sqrt(x)
+    x = np.sqrt(x)
     #x = np.clip(x, PHISAT_MIN, PHISAT_MAX)
     #x = (x - PHISAT_MEAN) / PHISAT_STD
     
@@ -510,7 +511,8 @@ def callback_decoder_satmae_fire(x, y):
     return torch.from_numpy(x_norm), torch.from_numpy(np.array(y)) #x_norm, y
 def callback_decoder_satmae_burned_area(x, y):
     x = pad_bands(x)
-    x_norm = sentinelNormalize(x)
+    x_norm = minmax_normalize_image(x)
+    #x_norm = sentinelNormalize(x)
     y = y.astype(np.float32, copy=False)
     x_norm = beo.channel_last_to_first(x_norm)
     x_norm = x_norm[:, 80:-80, 80:-80]
@@ -524,13 +526,22 @@ def callback_decoder_satmae_burned_area(x, y):
 def callback_decoder_satmae_clouds(x, y):
     #x_norm = (x - CLOUDS_MEAN) / CLOUDS_STD
     x = pad_bands(x)
+    x = beo.channel_last_to_first(x)
+    print(f"[SATMAE] x shape before normalizing: {x.shape}")
+    x = normalize_clouds(x)
+    x = beo.channel_first_to_last(x)
+    print(f"[SATMAE] x shape after normalizing: {x.shape}")
+    x = pad_bands(x)
+    print(f"[SATMAE] x shape after padding: {x.shape}")
     y = y.astype(np.float32, copy=False)
     x = beo.channel_last_to_first(x)
-    x_norm = normalize_clouds(x) # minmax_normalize_image(x) #(x-CLOUDS_MEAN)/CLOUDS_STD 
+    x_norm = x #normalize_clouds(x) # minmax_normalize_image(x) #(x-CLOUDS_MEAN)/CLOUDS_STD 
     x_norm = x_norm[:, 80:-80, 80:-80]
+    print(f"[SATMAE] x shape after cropping: {x_norm.shape}")
     #x_norm = x_norm[16:-16, 16:-16, :]
     if y.ndim > 2:
         y = beo.channel_last_to_first(y)
+        y = y[:, 80:-80, 80:-80]
     #if len(y.shape) > 2:
     #    y = y[16:-16, 16:-16, :]
     return torch.from_numpy(x_norm), torch.from_numpy(np.array(y))
@@ -559,6 +570,8 @@ def callback_preprocess_fire_prithvi(x, y):
     return x, y
 def callback_preprocess_prithvi_burned_area(x, y):
     return x, y
+def callback_preprocess_prithvi_clouds(x, y):
+    return x, y
 def callback_decoder_prithvi_fire(x, y):
     x = pad_bands(x)
     x, y =  callback_decoder_prithvi(x, y)
@@ -566,10 +579,15 @@ def callback_decoder_prithvi_fire(x, y):
     return x, y
 def callback_decoder_prithvi_clouds(x, y):
     #x_norm = (x-CLOUDS_MEAN)/CLOUDS_STD
+    print(f"X shape before padding: {x.shape}")
     x = pad_bands(x)
-    x, y =  callback_decoder_prithvi(x, y)
-    x = x[:, 16:-16, 16:-16]
+    print(f"X shape after padding: {x.shape}")
+    x = beo.channel_last_to_first(x)
+    print(f"X shape after channel swapping: {x.shape}")
     x_norm = normalize_clouds(x) #minmax_normalize_image(x) #(x-CLOUDS_MEAN)/CLOUDS_STD
+    x_norm = beo.channel_first_to_last(x_norm)
+    x_norm, y =  callback_decoder_prithvi(x_norm, y)
+    x_norm = x_norm[:, 16:-16, 16:-16]
     y = y[:, 16:-16, 16:-16]
     return x_norm, y
 
@@ -591,8 +609,8 @@ def callback_preprocess_phisatnet_burned_area(x, y):
     return x, y
 
 def load_data(dataset_path, device, with_augmentations=False, num_workers=0, batch_size=16, downstream_task=None, model_name=None, pad_bands=False, 
-             crop_images: bool = False, n: int = None, regions: list= None, y: str='lc', data_selection: str = 'create', name: str = None, split_percentage: list=None, by_region: bool=False, num_classes: int = 4, weights_dir: str = None):
-    
+             crop_images: bool = False, n: int = None, regions: list= None, y: str='lc', data_selection: str = 'create', name: str = None, split_percentage: list=None, by_region: bool=False, num_classes: int = 4, weights_dir: str = None, patch_size: Optional[Tuple[int, int]] = None):
+
     """
     Loads the data from the data folder.
     """
@@ -675,6 +693,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
                 cb_preprocess = callback_preprocess_fire_prithvi
             elif downstream_task == 'burned_area' or downstream_task == "worldfloods":
                 cb_preprocess = callback_preprocess_prithvi_burned_area
+            elif downstream_task == "clouds":
+                cb_preprocess = callback_preprocess_prithvi_clouds
             else:
                 cb_preprocess = callback_preprocess_prithvi
         elif model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
@@ -722,6 +742,9 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
     callback_pre_augmentation_inference = None
     callback_post_augmentation_inference = cb_decoder
     augmentations_inference = None
+    patch_size = None
+    if downstream_task == "clouds" or downstream_task == "worldfloods":
+        patch_size = (256, 256)
     
     if downstream_task == "clouds":
         weight, pos_weight, dl_train, dl_val, dl_test = get_zarr_dataloader(
@@ -745,7 +768,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             drop_last=False, 
             num_classes=num_classes, 
             n_shot=[n, 0, 0], 
-            weights_dir=weights_dir
+            weights_dir=weights_dir, 
+            patch_size=patch_size
         )
 
         dl_inference = dl_test
@@ -761,7 +785,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
             metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
             verbose = False,
-            split = [.9, .1], 
+            split = [.8, .2], 
             split_names = ["train", "validation"],
             callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val],
             callback_post_augmentation = [callback_post_augmentation_training, callback_post_augmentation_val],
@@ -772,7 +796,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             drop_last=False, 
             num_classes=num_classes, 
             n_shot=[n, 0], 
-            weights_dir=weights_dir
+            weights_dir=weights_dir, 
+            patch_size=patch_size
         )
 
         _, _, dl_test = get_zarr_dataloader(
@@ -795,7 +820,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             drop_last=False, 
             num_classes=num_classes, 
             n_shot=0, 
-            weights_dir=None
+            weights_dir=None, 
+            patch_size=patch_size
         ) 
         dl_inference = dl_test
 

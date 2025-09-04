@@ -15,22 +15,22 @@ input_size: 224
 lr: 0.0001
 lr_scheduler: reduce_on_plateau
 n_shot: [50, 100, 500, 1000, 5000] #null # ok?
-split_ratio: 1.
+split_ratio: null
 regions: null
 vis_val: True
 warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/phisat2_fm/pretrained_weights/phisat2net_geoaware_best.pt
+pretrained_model_path: /home/gdaga/pretrained_weights/phisat2net_geoaware_best.pt
 freeze_pretrained: True
-data_path_128_10m: /Data/clouds_dataset/clouds_dataset.zarr
-data_path_224_10m: /Data/clouds_dataset/clouds_dataset.zarr
-data_path_224_30m: /Data/clouds_dataset/clouds_dataset.zarr
+data_path_128_10m: /Data/phisatnet_clouds.zarr
+data_path_224_10m: /Data/phisatnet_clouds.zarr
+data_path_224_30m: /Data/phisatnet_clouds.zarr
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
 downstream_model_path: null
-data_path_inference_128: /Data/clouds_dataset/clouds_dataset.zarr
-data_path_inference_224: /Data/clouds_dataset/clouds_dataset.zarr
+data_path_inference_128: /Data/phisatnet_clouds.zarr
+data_path_inference_224: /Data/phisatnet_clouds.zarr
 output_path: /Data/phi2FM_models
 data_parallel: False
 device_ids: [0]

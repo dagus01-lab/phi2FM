@@ -392,10 +392,12 @@ class TrainBase():
                 print('Warmup finished')
 
             i, train_loss = self.t_loop(epoch, s)
-            j, val_loss = self.v_loop(epoch)
+            if epoch % 3 == 0:
+                j, val_loss = self.v_loop(epoch)
 
             self.tl.append(train_loss / (i + 1))
             self.vl.append(val_loss / (j + 1))
+
             self.lr.append(self.optimizer.param_groups[0]['lr'])
 
             # Update the scheduler
@@ -412,7 +414,7 @@ class TrainBase():
             self.model.train()
 
             # Early stopping
-            if self.epochs_no_improve == self.early_stop:
+            if self.epochs_no_improve == 2 * self.early_stop:
                 print(f'Early stopping triggered after {epoch + 1} epochs.')
                 self.last_epoch = epoch + 1
                 break

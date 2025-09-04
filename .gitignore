@@ -48,3 +48,4 @@ simulation_aux_files/
 
 # Ignore zip files
 *.zip
+*.pkl

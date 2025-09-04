@@ -310,8 +310,10 @@ def prithvi(checkpoint, output_dim=1, decoder_norm='batch', decoder_padding='sam
                         **model_args)
 
     if not inference:
-        del checkpoint['pos_embed']
-        del checkpoint['decoder_pos_embed']
+        if 'pos_embed' in checkpoint:
+            del checkpoint['pos_embed']
+        if 'decoder_pos_embed' in checkpoint:
+            del checkpoint['decoder_pos_embed']
 
     # load pre-trained model
     msg = model.vit_encoder.load_state_dict(checkpoint, strict=False)

@@ -188,7 +188,7 @@ class PhiSatDataset(Dataset):
                 elif s2 < s0 and s2 < s1:
                     h, w = s0, s1
                 else: 
-                    raise ValueError(f"Invalid image shape in sample {sid}: {img-shape}")
+                    raise ValueError(f"Invalid image shape in sample {sid}: {img.shape}")
                 #h, w = img.shape[1], img.shape[2]
                 # Iterate over y, x positions
                 for y in range(0, h, ph):
@@ -311,7 +311,7 @@ class PhiSatDataset(Dataset):
                 self.patches = [tuple(p) for p in patches]
                 self.sample_ids = [p[0] for p in self.patches]
             else:
-                self.sample_ids = self.patches
+                self.sample_ids = patches  # patches contains the sample_ids when patch_size is None
                 self.patches = self._generate_patches(self.sample_ids)
             #self.patches = self._generate_patches(self.sample_ids)
             if self.verbose:
@@ -430,11 +430,13 @@ class PhiSatDataset(Dataset):
         if self.patch_size:
             self.patches = final_ids
             self.sample_ids = [p[0] for p in self.patches]
+            with open(sample_file, 'w') as f:
+                json.dump(self.patches, f, indent=2)
         else:
             self.sample_ids = final_ids
             self.patches = self._generate_patches(final_ids)
-        with open(sample_file, 'w') as f:
-            json.dump(self.patches, f, indent=2)
+            with open(sample_file, 'w') as f:
+                json.dump(self.sample_ids, f, indent=2)  # Save sample_ids, not patches
         if self.verbose:
             print(f"[INFO] Saved {len(self.sample_ids)} samples to {sample_file}")
     
@@ -447,20 +449,20 @@ class PhiSatDataset(Dataset):
             #print(self.num_classes)
             #print(lab.shape)
             #label = F.one_hot(lab, num_classes=self.num_classes).numpy()
-        try:
-            label = F.one_hot(lab, num_classes=self.num_classes).numpy()
-        except RuntimeError as e:
-            print("RuntimeError during one-hot encoding:", e)
-            print("Unique label values found:", torch.unique(lab))
-            
-            # Optional: print out specific problematic indices
-            invalid_mask = (lab >= self.num_classes) | (lab < 0)
-            if invalid_mask.any():
-                invalid_indices = torch.nonzero(invalid_mask, as_tuple=False)
-                print(f"Invalid class values (not in [0, {self.num_classes - 1}]):")
-                for idx in invalid_indices:
-                    print(f"   At position {tuple(idx.tolist())} -> value: {lab[tuple(idx.tolist())].item()}")
-            raise  # Re-raise to let the calling code handle or crash as needed            
+            try:
+                label = F.one_hot(lab, num_classes=self.num_classes).numpy()
+            except RuntimeError as e:
+                print("RuntimeError during one-hot encoding:", e)
+                print("Unique label values found:", torch.unique(lab))
+                
+                # Optional: print out specific problematic indices
+                invalid_mask = (lab >= self.num_classes) | (lab < 0)
+                if invalid_mask.any():
+                    invalid_indices = torch.nonzero(invalid_mask, as_tuple=False)
+                    print(f"Invalid class values (not in [0, {self.num_classes - 1}]):")
+                    for idx in invalid_indices:
+                        print(f"   At position {tuple(idx.tolist())} -> value: {lab[tuple(idx.tolist())].item()}")
+                raise  # Re-raise to let the calling code handle or crash as needed            
 
         # Optional image cropping
         if self.crop_images:
@@ -818,7 +820,8 @@ def get_zarr_dataloader(
     weights_dir: str = None, 
     n_regions: int = 6, 
     save:bool = False, 
-    split_names: List[str] = None
+    split_names: List[str] = None, 
+    patch_size: Tuple[int, int] = None
     
 ) -> DataLoader:
     """
@@ -856,7 +859,7 @@ def get_zarr_dataloader(
         verbose=verbose, 
         crop_images=crop_images, 
         num_classes=num_classes,
-        patch_size=(256,256),
+        patch_size=patch_size,
         weights_dir=weights_dir, 
         n_regions=n_regions, 
         n_shot_strategy='stratified'

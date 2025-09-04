@@ -302,7 +302,10 @@ def satmae_vit_cnn(checkpoint, img_size=96, patch_size=8, in_chans=10, output_di
 
     # load pre-trained model weights
     state_dict = model.vit_encoder.state_dict()
-    checkpoint_model = checkpoint['model']
+    if model in checkpoint:
+        checkpoint_model = checkpoint['model']
+    else:
+        checkpoint_model = checkpoint
 
     # model_sd, shared_weights = load_encoder_weights(checkpoint_model, state_dict)
 

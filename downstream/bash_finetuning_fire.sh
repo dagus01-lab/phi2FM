@@ -2,17 +2,17 @@
 
 # Define the list of configuration files
 configs=(
-    "args/finetune_FMs/fire/geoaware.yml"
-    "args/finetune_FMs/fire/moco.yml"
+    #"args/finetune_FMs/fire/geoaware.yml"
+    #"args/finetune_FMs/fire/moco.yml"
     "args/finetune_FMs/fire/phisatnet.yml"
-    "args/finetune_FMs/fire/dino.yml"
-    "args/finetune_FMs/fire/seco.yml"
+    #"args/finetune_FMs/fire/dino.yml"
+    #"args/finetune_FMs/fire/seco.yml"
     #"args/finetune_FMs/fire/uniphi.yml"
-    "args/finetune_FMs/fire/gassl.yml" 
-    "args/finetune_FMs/fire/caco.yml" 
+    #"args/finetune_FMs/fire/gassl.yml" 
+    #"args/finetune_FMs/fire/caco.yml" 
     ##"args/finetune_FMs/vit.yml" -> fix
-    "args/finetune_FMs/fire/satmae.yml" 
-    "args/finetune_FMs/fire/prithvi.yml"
+    #"args/finetune_FMs/fire/satmae.yml" 
+    #"args/finetune_FMs/fire/prithvi.yml"
 )
 
 # Loop through each config file and execute the training script sequentially

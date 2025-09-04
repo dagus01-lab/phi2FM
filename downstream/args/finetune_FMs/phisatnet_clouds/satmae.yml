@@ -22,15 +22,15 @@ warmup: True
 warmp_steps: 5
 warmup_gamma: 10
 min_lr: null
-pretrained_model_path: /home/ccollado/phileo_NFS/phileo_data/pretrained_models/SatMAE_pretrain-vit-large-e199.pth # **********************************
+pretrained_model_path: /home/gdaga/pretrained_weights/SatMAE_pretrain-vit-large-e199.pth # **********************************
 freeze_pretrained: True
-data_path_128_10m: /Data/clouds_dataset/clouds_dataset.zarr
-data_path_224_10m: /Data/clouds_dataset/clouds_dataset.zarr
-data_path_224_30m: /Data/clouds_dataset/clouds_dataset.zarr
+data_path_128_10m: /Data/phisatnet_clouds.zarr
+data_path_224_10m: /Data/phisatnet_clouds.zarr
+data_path_224_30m: /Data/phisatnet_clouds.zarr
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
 downstream_model_path: null
-data_path_inference_128: /Data/clouds_dataset/clouds_dataset.zarr
-data_path_inference_224: /Data/clouds_dataset/clouds_dataset.zarr
+data_path_inference_128: /Data/phisatnet_clouds.zarr
+data_path_inference_224: /Data/phisatnet_clouds.zarr
 output_path: /Data/phi2FM_models
 data_parallel: False
 device_ids: [0]
