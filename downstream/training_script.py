@@ -1020,7 +1020,11 @@ if __name__ == "__main__":
     
     # RUN WITH MULTIPLE N-SHOT AND TASKS
     # n_shot_list = [5000]
-    n_shot_list = [50] #[50, 100, 500, 1000, 5000]#[500, 5000] #[50, 100, 500, 1000, 5000]
+    if isinstance(args.n_shot, list):
+        n_shot_list = args.n_shot
+    elif isinstance(args.n_shot, int):
+        n_shot_list = [args.n_shot]
+    #n_shot_list = [50, 100, 500, 1000, 5000]
     base_exp_name =  args.experiment_name
     #n_shot_list = [10, 20, 100, 200, 500]
     for n_shot in n_shot_list:
