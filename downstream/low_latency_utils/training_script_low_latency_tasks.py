@@ -348,6 +348,16 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         return satmae_vit_cnn(img_size=96, patch_size=8, in_chans=input_channels,
                               checkpoint=sd, freeze_body=freeze, classifier=True, **satmae_kwargs)
 
+    elif model_name == 'terramind':
+        sd = torch.load(path_model_weights, map_location=device)
+        prithvi_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return terramind(checkpoint=sd, freeze_body=freeze, **prithvi_kwargs)
+
+    elif model_name == 'terramind_classifier':
+        sd = torch.load(path_model_weights, map_location=device)
+        prithvi_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        return terramind(checkpoint=sd, freeze_body=freeze, **prithvi_kwargs)
+
     elif model_name == 'prithvi':
         sd = torch.load(path_model_weights, map_location=device)
         prithvi_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')

@@ -1,28 +1,19 @@
 import os
 import yaml
-
 import torch
-# torch.autograd.detect_anomaly(check_nan=True)
+import argparse
+import random
+import inspect
+import numpy as np
+import torch.nn as nn
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 from torchinfo import summary
 from fvcore.nn import FlopCountAnalysis
-
-import numpy as np
-import random
-import inspect
 from collections import OrderedDict
-
-
-import torch.nn as nn
 from datetime import date
-import argparse
-
 from torch.nn.parallel import DistributedDataParallel as DDP
-
-
-
-import warnings
-warnings.filterwarnings("ignore", category=FutureWarning)
 
 from models.model_Baseline import BaselineNet
 from models.model_CoreCNN_versions import CoreUnet_nano, CoreUnet_tiny, CoreUnet_base, CoreUnet_large, CoreUnet_huge, Core_nano, CoreUnetGeolocation_nano
@@ -37,6 +28,7 @@ from models.model_AutoEncoderViTPretrained_classifier import vit_cnn_classifier,
 from models.model_CoreVAE import CoreVAE_nano
 from models.model_SatMAE import satmae_vit_cnn
 from models.models_Prithvi import prithvi
+from models.models_terramind import terramind
 from models.model_Seco import seasonal_contrast
 from models.model_Resnet50 import resnet
 from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor, PhileoPrecursorClassifier
@@ -46,12 +38,10 @@ from models.model_dino_ssl4eo12 import dino_resnet
 from pretrain.models.utils_fm import get_phisat2_model
 from downstream.models.phisatnet_downstream import PhiSatNetDownstream
 
-
-from utils import data_protocol
 from utils import load_data
 from utils import training_loops
 from utils.training_utils import read_yaml
-from utils.utils import module_memory_usage, dataloader_to_arrays, dataloader_to_tensors, convert_to_onnx, ddp_setup, ddp_cleanup
+from utils.utils import module_memory_usage, ddp_setup, ddp_cleanup
 
 torch.manual_seed(123456)
 CNN_LIST = ['baseline_cnn', 'core_unet_nano','core_unet_tiny','core_unet_base', 'core_unet_large', 'core_unet_huge',
@@ -76,10 +66,12 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        ]
 
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
-                           'vit_cnn_classifier', 'prithvi_classifier', 'vit_cnn_wSkip', 'vit_cnn_gc_wSkip']
+                           'vit_cnn_classifier', 'prithvi_classifier', 'vit_cnn_wSkip', 'vit_cnn_gc_wSkip',
+                           "terramind_classifier", "terramind_segmenter"]
 
 MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier', 
-              'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier', 'caco', 'caco_classifier']
+              'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier', 'caco', 'caco_classifier',
+              "terramind_classifier", "terramind_segmenter"]
 MODELS_224_r30 = ['prithvi', 'prithvi_classifier']
 
 MODEL_LIST = CNN_LIST + MIXER_LIST + VIT_LIST + CNN_PRETRAINED_LIST + VIT_CNN_LIST + VIT_CNN_PRETRAINED_LIST
@@ -387,6 +379,10 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         sd = torch.load(path_model_weights, map_location=device)
         prithvi_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
         return prithvi(checkpoint=sd, freeze_body=freeze, classifier=True, **prithvi_kwargs)
+
+    elif "terramind" in model_name:
+        classify = False if "classifier" not in model_name else True
+        return terramind(freeze_body=freeze, classifier=classify)
 
     elif model_name == 'vit_cnn':
         sd = torch.load(path_model_weights, map_location=device)
@@ -723,7 +719,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         'roads': 1,
         'building': 1,
         'building_classification': 5,
-        'roads_classification': 2,
+        'roads_classification': 3,
         'coords': 3, 
         'fire': 4, 
         'burned_area':4, 
