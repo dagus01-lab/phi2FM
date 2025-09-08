@@ -123,6 +123,8 @@ def to_one_hot_building(y):
 
 
 def pad_bands(x):
+    PROCESS_PHISAT = 13
+
     if x.shape[2] == 8:
         if PROCESS_PHISAT == 10:
             x = np.delete(x, 3, axis=2)
@@ -614,7 +616,12 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
     """
     Loads the data from the data folder.
     """
+
+    print("pad_bands", pad_bands)
+
     global PROCESS_PHISAT
+    # TODO: In the following methods, PROCESS_PHISAT is required to be an int, not a bool? Also, it's not found:
+    #  NameError: name 'PROCESS_PHISAT' is not defined
     PROCESS_PHISAT = pad_bands
     
     
@@ -745,7 +752,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
 
     # TODO: Why was the below line hard-coded to None? Shouldn't this correspond to input_size in the config?
     #  Otherwise, we would have always loaded full tiles, no?
-    patch_size = patch_size
+    patch_size = None
     if downstream_task == "clouds" or downstream_task == "worldfloods":
         patch_size = (256, 256)
     

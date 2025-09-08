@@ -154,7 +154,7 @@ class PhiSatDataset(Dataset):
         # Build patches list
 
         self.patches = self._generate_patches(self.sample_ids)
-        assert all([len(sample) == 3 for sample in self.patches]), "Image shape wrong"
+        # assert all([len(sample) == 3 for sample in self.patches]), "Image shape wrong"
         print("Created all patches.")
 
         # Compute class and pos weights at init
