@@ -715,8 +715,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
         if downstream_task in ['geo', 'lc_classification', 'building_classification', 'roads_regression', 'coords', ]:
             cb_postprocess = callback_postprocess_decoder_geo
             aug = [
-                AugmentationRotation(p=0, inplace=True),
-                AugmentationMirror(p=0.2, inplace=True),
+                AugmentationRotationXY(p=0, inplace=True),
+                AugmentationMirrorXY(p=0.2, inplace=True),
                 # beo.AugmentationCutmix(p=0.2, inplace=True),
                 AugmentationNoiseNormal(p=0.2, inplace=True),
             ]
@@ -800,32 +800,32 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             patch_size=patch_size
         )
 
-        _, _, dl_test = get_zarr_dataloader(
-            zarr_path=dataset_path,                     # Path to the Zarr archive
-            dataset_set="test",                 # Dataset subset to use
-            batch_size=16,                           # Number of samples per batch
-            shuffle=True,                            # Enable shuffling (useful for training)
-            num_workers=4,                           # Number of parallel workers for loading
-            #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
-            metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
-            verbose = False,
-            split = None, 
-            split_names = ["test"],
-            callback_pre_augmentation = callback_pre_augmentation_test,
-            callback_post_augmentation = callback_post_augmentation_test,
-            augmentations = augmentations_test,
-            crop_images= crop_images, 
-            generator= torch.Generator(device), 
-            pin_memory=True, 
-            drop_last=False, 
-            num_classes=num_classes, 
-            n_shot=0, 
-            weights_dir=None, 
-            patch_size=patch_size
-        ) 
-        dl_inference = dl_test
+        # _, _, dl_test = get_zarr_dataloader(
+        #     zarr_path=dataset_path,                     # Path to the Zarr archive
+        #     dataset_set="test",                 # Dataset subset to use
+        #     batch_size=16,                           # Number of samples per batch
+        #     shuffle=True,                            # Enable shuffling (useful for training)
+        #     num_workers=4,                           # Number of parallel workers for loading
+        #     #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
+        #     metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
+        #     verbose = False,
+        #     split = None,
+        #     split_names = ["test"],
+        #     callback_pre_augmentation = callback_pre_augmentation_test,
+        #     callback_post_augmentation = callback_post_augmentation_test,
+        #     augmentations = augmentations_test,
+        #     crop_images= crop_images,
+        #     generator= torch.Generator(device),
+        #     pin_memory=True,
+        #     drop_last=False,
+        #     num_classes=num_classes,
+        #     n_shot=0,
+        #     weights_dir=None,
+        #     patch_size=patch_size
+        # )
+        # dl_inference = dl_test
 
-    return weight, pos_weight, dl_train, dl_test, dl_val, dl_inference
+    return weight, pos_weight, dl_train, None, dl_val, None
 
 
 

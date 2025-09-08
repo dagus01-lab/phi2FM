@@ -842,8 +842,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     if world_rank == 0:
         print(f"Length of training dataloader: {len(dl_train)}")
         print(f"Length of validation dataloader: {len(dl_val)}")
-        print(f"Length of test dataloader: {len(dl_test)}")
-        print(f"Length of inference dataloader: {len(dl_inference)}")
+        # print(f"Length of test dataloader: {len(dl_test)}")
+        # print(f"Length of inference dataloader: {len(dl_inference)}")
         print(f"Training on: {model_name}")
         print('--' * 10)
 
@@ -895,7 +895,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # -----------------------------------------------------------------------
 
     # import pdb; pdb.set_trace()
-    
+
     if train_mode == 'train_test_inference':
         trainer.train()
         trainer.test()
@@ -1013,7 +1013,7 @@ if __name__ == "__main__":
         args = parser.parse_args()
 
     # 2. Run main function
-    
+
     # RUN WITH MULTIPLE N-SHOT AND TASKS
     # n_shot_list = [5000]
     if isinstance(args.n_shot, list):

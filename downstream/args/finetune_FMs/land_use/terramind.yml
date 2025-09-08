@@ -31,7 +31,7 @@ train_mode: train_test                      # train_test, train_test_inference, 
 downstream_model_path: null
 data_path_inference_128: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_roads.zarr
 data_path_inference_224: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_roads.zarr
-output_path: /Data/phi2FM_n_shot
+output_path: /Users/jja/Documents/02_EOFM/phi2FM/downstream/output
 data_parallel: False
 device_ids: [0]
 pad_bands: 13 # 10 for all models, None for phisatnet, 13 for moco and dino
