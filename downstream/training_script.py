@@ -719,7 +719,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         'roads': 1,
         'building': 1,
         'building_classification': 5,
-        'roads_classification': 3,
+        'roads_classification': 2,
         'coords': 3, 
         'fire': 4, 
         'burned_area':4, 
