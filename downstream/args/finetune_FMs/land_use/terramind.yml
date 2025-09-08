@@ -25,13 +25,13 @@ warmup_gamma: 10
 min_lr: null
 pretrained_model_path: not_required_due_to_terratorch # **********************************
 freeze_pretrained: True
-data_path_128_10m: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_roads.zarr
-data_path_224_10m: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_roads.zarr
-data_path_224_30m: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_roads.zarr
+data_path_128_10m: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_lc.zarr
+data_path_224_10m: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_lc.zarr
+data_path_224_30m: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_lc.zarr
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
 downstream_model_path: null
-data_path_inference_128: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_roads.zarr
-data_path_inference_224: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_roads.zarr
+data_path_inference_128: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_lc.zarr
+data_path_inference_224: /Users/jja/Documents/02_EOFM/phi2FM/downstream/data/phileo-bench_lc.zarr
 output_path: /Users/jja/Documents/02_EOFM/phi2FM/downstream/output
 data_parallel: False
 device_ids: [0]

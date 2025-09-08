@@ -209,7 +209,6 @@ class PhiSatDataset(Dataset):
         return len(self.patches)
 
     def __getitem__(self, idx: int) -> Dict:
-        sid, y, x = self.patches[idx]
         sid, y, x = self._unpack_patch(self.patches[idx])
         sample_group = self.dataset_group[sid]
         #img = sample_group['img'][:]
@@ -313,6 +312,8 @@ class PhiSatDataset(Dataset):
                 #self.sample_ids = json.load(f)
                 patches =  json.load(f)
             if self.patch_size:
+                print("if self.patch_size")
+                exit()
                 self.patches = [tuple(p) for p in patches]
                 self.sample_ids = [p[0] for p in self.patches]
             else:
