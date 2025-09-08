@@ -781,6 +781,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             dataset_set="trainval",                 # Dataset subset to use
             batch_size=16,                           # Number of samples per batch
             shuffle=True,                            # Enable shuffling (useful for training)
+            # TODO: Increase number of workers
             num_workers=4,                           # Number of parallel workers for loading
             #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
             metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields

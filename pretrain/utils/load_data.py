@@ -82,6 +82,8 @@ class TransformX:
         else:
             # If no augmentations, perform a center crop if needed.
             if self.original_size > self.input_size:
+                # TODO: Not super relevant for downstream probably, but still check the following,
+                #  either it's redundant or a minor bug?
                 top = (self.original_size - self.input_size) // 2
                 left = (self.original_size - self.input_size) // 2
                 x_np = x_np[:, top:top+self.input_size, left:left+self.input_size]

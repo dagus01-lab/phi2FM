@@ -71,7 +71,9 @@ VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE
 
 MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier', 
               'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier', 'caco', 'caco_classifier',
-              "terramind_classifier", "terramind_segmenter"]
+              # "terramind_classifier", "terramind_segmenter"
+              ]
+
 MODELS_224_r30 = ['prithvi', 'prithvi_classifier']
 
 MODEL_LIST = CNN_LIST + MIXER_LIST + VIT_LIST + CNN_PRETRAINED_LIST + VIT_CNN_LIST + VIT_CNN_PRETRAINED_LIST
@@ -661,7 +663,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             'seasonal_contrast': (batch_size, input_channels, 224, 224),
             'resnet_imagenet': (batch_size, input_channels, 224, 224),
             'resnet': (batch_size, input_channels, 224, 224),
-            'seasonal_contrast_classifier': (batch_size, input_channels, 224, 224)
+            'seasonal_contrast_classifier': (batch_size, input_channels, 224, 224),
+            'terramind': (batch_size, input_channels, 224, 224)
         }
 
         input_size_total = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
