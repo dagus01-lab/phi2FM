@@ -514,18 +514,14 @@ def get_args():
     parser.add_argument('--pad_bands', type=int, default=10)
     parser.add_argument('--min_lr', type=float, default=1e-6)
 
-
-
     return parser, parser_yaml
-
-
 
 
 def main(experiment_name, downstream_task, model_name, augmentations, batch_size, model_device, generator_device, num_workers, early_stop, 
         epochs, input_channels, output_channels, input_size, lr, lr_scheduler, n_shot, split_ratio, regions, vis_val, warmup, warmp_steps, 
         warmup_gamma, pretrained_model_path, freeze_pretrained, data_path_128_10m, data_path_224_10m, data_path_224_30m, data_path_inference_128, 
         data_path_inference_224, train_mode, downstream_model_path, output_path, data_parallel, 
-        device_ids, only_get_datasets, pad_bands, min_lr):
+        device_ids, only_get_datasets, pad_bands, min_lr, patch_size):
     """ 
     main script for PhilEO Bench. Used to run model training experiments with randomly initialized and pre-trained models on a number of downstream tasks. 
     The script handles dataset creation (based on data protocol options selected), data preprocessing (based on downstream task & model type) & model, training, validation and testing. 
@@ -764,41 +760,10 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         if n_shot == 0:
             n_shot = 1
             train_mode = 'inference'
-        #x_train, y_train, x_val, y_val, pos_weight, weights = data_protocol.protocol_fewshot_memmapped(
-        #    folder=dataset_folder,
-        #    dst=None,
-        #    n=n_shot,
-        #    regions=regions,
-        #    y=downstream_task,
-        #    data_selection='create',
-        #    name=dataset_name,
-        #    crop_images=crop_images
-        #)
         additional_params = {'n':n_shot, 'regions':regions, 'y':downstream_task, 'data_selection':'create', 'name':dataset_name,'crop_images':crop_images}
 
     elif isinstance(split_ratio, float):
-        #x_train, y_train, x_val, y_val = data_protocol.protocol_split(
-        #    dataset_folder,
-        #    split_percentage=split_ratio,
-        #    regions=regions,
-        #    y=downstream_task,
-        #    by_region=by_region
-        #)
         additional_params = {'split_percentage':split_ratio, 'regions':regions, 'y':downstream_task,'by_region':by_region}
-
-    # Prepare testset and inference set
-    #x_test, y_test = data_protocol.get_testset(
-    #    folder=dataset_folder,
-    #    y=downstream_task,
-    #    crop_images=crop_images,
-    #    by_region=by_region,
-    #)
-    #x_inference, y_inference = data_protocol.get_testset(
-    #    folder=data_path_inference,
-    #    y=downstream_task,
-    #    crop_images=crop_images,
-    #    by_region=by_region
-    #)
 
     # Create dataloaders
     print(f'Batch size: {batch_size}')
@@ -818,6 +783,10 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         weights_dir=downstream_task,
         patch_size=patch_size,
     )
+
+    print(next(iter(dl_train)))
+    exit()
+
     #print(f"Weight: {weights}, position weight:{pos_weight}")
         
     # Log shapes of first elements in each dataset
