@@ -801,6 +801,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
     # Create dataloaders
     print(f'Batch size: {batch_size}')
+    patch_size = (args.input_size, args.input_size)
     weights, pos_weight, dl_train, dl_test, dl_val, dl_inference= load_data.load_data(
         dataset_folder,
         with_augmentations=augmentations,
@@ -813,7 +814,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         crop_images=crop_images, 
         num_classes=output_channels, 
         n=n_shot, 
-        weights_dir=downstream_task
+        weights_dir=downstream_task,
+        patch_size=patch_size,
     )
     #print(f"Weight: {weights}, position weight:{pos_weight}")
         

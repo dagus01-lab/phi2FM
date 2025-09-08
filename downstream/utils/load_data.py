@@ -742,7 +742,10 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
     callback_pre_augmentation_inference = None
     callback_post_augmentation_inference = cb_decoder
     augmentations_inference = None
-    patch_size = None
+
+    # TODO: Why was the below line hard-coded to None? Shouldn't this correspond to input_size in the config?
+    #  Otherwise, we would have always loaded full tiles, no?
+    patch_size = patch_size
     if downstream_task == "clouds" or downstream_task == "worldfloods":
         patch_size = (256, 256)
     
