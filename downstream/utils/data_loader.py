@@ -153,9 +153,7 @@ class PhiSatDataset(Dataset):
 
         # Build patches list
 
-        print("calling generate patches")
         self.patches = self._generate_patches(self.sample_ids)
-        print(len(self.patches))
 
         # Compute class and pos weights at init
         self.class_weights, self.pos_weights = self._load_or_compute_weights()
@@ -199,7 +197,7 @@ class PhiSatDataset(Dataset):
                         # Skip if patch would be out-of-bounds or too small
                         if y + ph > h or x + pw > w:
                             continue
-                        #print(f"Appended patch at ({x}, {y}) from image {sid} with shape {img.shape}")
+                        # print(f"Appended patch at ({x}, {y}) from image {sid} with shape {img.shape}")
                         patches.append((sid, y, x))
             return patches
         else:
@@ -216,9 +214,9 @@ class PhiSatDataset(Dataset):
 
         img = self._load_zarr_array(sample_group['img'], y, x)
         label = self._load_zarr_array(sample_group['label'], y, x)
-        print(f"Before preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
+        # print(f"Before preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
         img, label = self._preprocess(img, label, y, x)
-        print(f"After preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
+        # print(f"After preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
         
         sample = {'img': img, 'label': label, 'task': sample_group.attrs.get('task', ''), 'sample_id': sid}
         for key in self.metadata_keys:
@@ -227,9 +225,6 @@ class PhiSatDataset(Dataset):
         if self.patch_size:
             sample['patch_coord'] = (y, x)
 
-        print(sample["img"].shape)
-        print(sample["label"].shape)
-        exit()
         return sample
 
     def _unpack_patch(self, patch):

@@ -485,6 +485,7 @@ def get_args():
                         help='select downstream task')
     parser.add_argument('--input_channels', type=int, required=False, default=10, help='Define Number of input channels')
     parser.add_argument('--input_size', type=int, required=True, default=128, help='Define input size')
+    parser.add_argument('--patch_size', type=int, required=False, default=16, help='Define input size')
     parser.add_argument('--output_channels', type=int, required=True, default=1, help='Define Number of output channels')
 
     parser.add_argument('--regions', type=list, default=None, help='select regions to be included',
@@ -801,7 +802,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
 
     # Create dataloaders
     print(f'Batch size: {batch_size}')
-    patch_size = (args.input_size, args.input_size)
+    patch_size = (args.patch_size, args.patch_size)
     weights, pos_weight, dl_train, dl_test, dl_val, dl_inference= load_data.load_data(
         dataset_folder,
         with_augmentations=augmentations,
