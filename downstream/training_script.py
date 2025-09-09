@@ -2,7 +2,7 @@ import os
 import yaml
 import torch
 import argparse
-import random
+import wandb
 import inspect
 import numpy as np
 import torch.nn as nn
@@ -82,7 +82,7 @@ DOWNSTREAM_LIST = ['lc', 'building', 'roads', 'lc_classification', 'building_cla
 
 def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_scheduler, warmup, early_stop, dl_train,
                 dl_val, dl_test, dl_inference, NAME, OUTPUT_FOLDER, vis_val, warmup_steps, warmup_gamma, pos_weight, 
-                weights, save_info_vars, rank=None, min_lr=None):
+                weights, save_info_vars, wandb_run, rank=None, min_lr=None):
     
     if model_name in (CNN_LIST + MIXER_LIST + VIT_CNN_LIST + CNN_PRETRAINED_LIST + VIT_CNN_PRETRAINED_LIST):
         if downstream_task == 'roads' or downstream_task == 'building':
@@ -91,14 +91,14 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                train_loader=dl_train,
                                                val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                               warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars)
+                                               warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars, wandb_run=wandb_run)
         elif downstream_task == 'coords':
             trainer = training_loops.TrainGeoLocate(epochs=epochs, lr=lr, model=model, device=device,
                                                     lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
                                                     train_loader=dl_train,
                                                     val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                     out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                                    warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars)
+                                                    warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars, wandb_run=wandb_run)
             
         elif downstream_task == 'lc':
             trainer = training_loops.TrainLandCover(epochs=epochs, lr=lr, model=model, device=device,
@@ -106,7 +106,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                     train_loader=dl_train,
                                                     val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                     out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                                    warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars)
+                                                    warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars, wandb_run=wandb_run)
         elif downstream_task == 'building_classification':
             trainer = training_loops.TrainClassificationBuildings(epochs=epochs, lr=lr, model=model, device=device,
                                                                   lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
@@ -114,7 +114,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                                   val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                                   out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                                   warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, weights=weights,
-                                                                  save_info_vars=save_info_vars)
+                                                                  save_info_vars=save_info_vars, wandb_run=wandb_run)
 
         elif downstream_task == 'lc_classification':
             trainer = training_loops.TrainClassificationLC(epochs=epochs, lr=lr, model=model, device=device,
@@ -123,7 +123,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, pos_weight=pos_weight,
-                                                           save_info_vars=save_info_vars)
+                                                           save_info_vars=save_info_vars, wandb_run=wandb_run)
 
         elif downstream_task == 'roads_classification':
             trainer = training_loops.TrainClassificationRoads(epochs=epochs, lr=lr, model=model, device=device,
@@ -132,7 +132,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars)
+                                                           save_info_vars=save_info_vars, wandb_run=wandb_run)
         elif downstream_task == 'fire':
             print(f"yes: {model_name}")
             trainer = training_loops.TrainClassificationFire(epochs=epochs, lr=lr, model=model, device=device,
@@ -141,7 +141,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'burned_area':
             trainer = training_loops.TrainSegmentationBurned(epochs=epochs, lr=lr, model=model, device=device,
                                                            lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
@@ -149,7 +149,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'clouds':
             trainer = training_loops.TrainCloudSegmentation(epochs=epochs, lr=lr, model=model, device=device,
                                                            lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
@@ -157,7 +157,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'worldfloods':
             trainer = training_loops.TrainSegmentationWorldfloods(epochs=epochs, lr=lr, model=model, device=device,
                                                            lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
@@ -165,7 +165,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, num_classes=3)
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, num_classes=3, wandb_run=wandb_run)
 
     elif model_name in (VIT_LIST):
         if downstream_task == 'roads' or downstream_task == 'building' or downstream_task=='burned_area':
@@ -173,7 +173,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                               lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop, train_loader=dl_train,
                                               val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                               out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                              warmup_steps=warmup_steps, warmup_gamma=warmup_gamma)
+                                              warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, wandb_run=wandb_run)
 
         elif downstream_task == 'lc':
             trainer = training_loops.TrainViTLandCover(epochs=epochs, lr=lr, model=model, device=device,
@@ -181,7 +181,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                        train_loader=dl_train,
                                                        val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                        out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                                       warmup_steps=warmup_steps, warmup_gamma=warmup_gamma)
+                                                       warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, wandb_run=wandb_run)
 
     if model_name == 'core_vae_nano':
         trainer = training_loops.TrainVAE(epochs=epochs, lr=lr, model=model, device=device,
@@ -513,6 +513,7 @@ def get_args():
     parser.add_argument('--warmup_gamma', type=int, default=10)
     parser.add_argument('--pad_bands', type=int, default=10)
     parser.add_argument('--min_lr', type=float, default=1e-6)
+    parser.add_argument('--wandb', type=bool, default=False)
 
     return parser, parser_yaml
 
@@ -521,7 +522,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         epochs, input_channels, output_channels, input_size, lr, lr_scheduler, n_shot, split_ratio, regions, vis_val, warmup, warmp_steps, 
         warmup_gamma, pretrained_model_path, freeze_pretrained, data_path_128_10m, data_path_224_10m, data_path_224_30m, data_path_inference_128, 
         data_path_inference_224, train_mode, downstream_model_path, output_path, data_parallel, 
-        device_ids, only_get_datasets, pad_bands, min_lr, patch_size):
+        device_ids, only_get_datasets, pad_bands, min_lr, patch_size, wandb, wandb_run):
     """ 
     main script for PhilEO Bench. Used to run model training experiments with randomly initialized and pre-trained models on a number of downstream tasks. 
     The script handles dataset creation (based on data protocol options selected), data preprocessing (based on downstream task & model type) & model, training, validation and testing. 
@@ -784,38 +785,12 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         patch_size=patch_size,
     )
 
-    #print(f"Weight: {weights}, position weight:{pos_weight}")
-        
-    # Log shapes of first elements in each dataset
-    if False:#world_rank == 0:
-        print("Dataset protocol:", dataset_name)
-        if len(dl_train) > 0:
-            x, y = next(iter(dl_train))[0] 
-            print("Training set datapoint shape: X -", x.shape)
-        else:
-            print("Training dataset is empty.")
-        if len(dl_var) > 0:
-            x, y = next(iter(dl_val))[0]
-            print("Validation set datapoint shape: X -", x.shape)
-        else:
-            print("Validation dataset is empty.")
-        if len(dl_test) > 0:
-            x, y = next(iter(dl_test))[0]
-            print("Test set datapoint shape: X -", x.shape)
-        else:
-            print("Test dataset is empty.")
-        if len(dl_inference) > 0:
-            x, y = next(iter(dl_inference))[0]
-            print("Inference set datapoint shape: X -", x.shape)
-        else:
-            print("Inference dataset is empty.")
-    
     # Log dataloader sizes and training model
     if world_rank == 0:
         print(f"Length of training dataloader: {len(dl_train)}")
         print(f"Length of validation dataloader: {len(dl_val)}")
-        # print(f"Length of test dataloader: {len(dl_test)}")
-        # print(f"Length of inference dataloader: {len(dl_inference)}")
+        print(f"Length of test dataloader: {len(dl_test)}")
+        print(f"Length of inference dataloader: {len(dl_inference)}")
         print(f"Training on: {model_name}")
         print('--' * 10)
 
@@ -858,7 +833,8 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         weights=weights,
         save_info_vars=(model_summary, n_shot, split_ratio, warmup, init_lr),
         rank=world_rank,
-        min_lr=min_lr
+        min_lr=min_lr,
+        wandb_run=wandb_run
     )
 
 
@@ -931,7 +907,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         print(f"See results of experiment in {OUTPUT_FOLDER}")
 
 
-
 def override_paths_with_env(args_dict):
     downstream_task = args_dict.get('downstream_task', '').upper()
 
@@ -966,12 +941,12 @@ def override_paths_with_env(args_dict):
         args_dict["pretrained_model_path"] = new_path
 
     return args_dict
+
+
 if __name__ == "__main__":
     
     print('Starting training_script.py')
-
-    pid = os.getpid()
-    print(f"Script started with PID: {pid}")
+    print(f"Script started with PID: {os.getpid()}")
 
     # 1. Reading YAML file
     parser, parser_yaml = get_args()
@@ -987,14 +962,23 @@ if __name__ == "__main__":
     # 2. Run main function
 
     # RUN WITH MULTIPLE N-SHOT AND TASKS
-    # n_shot_list = [5000]
     if isinstance(args.n_shot, list):
         n_shot_list = args.n_shot
     elif isinstance(args.n_shot, int):
         n_shot_list = [args.n_shot]
-    #n_shot_list = [50, 100, 500, 1000, 5000]
-    base_exp_name =  args.experiment_name
-    #n_shot_list = [10, 20, 100, 200, 500]
+    base_exp_name = args.experiment_name
+
+    wandb_run = None
+    if args.wandb:
+        wandb.login()
+        wandb_run = wandb.init(project="esa-phi-sat2", name=args.downstream_task, config={
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "learning_rate": args.lr,
+        })
+
+    args.update({"wandb_run": wandb_run})
+
     for n_shot in n_shot_list:
         args.n_shot = n_shot
         for freeze_pretrained in [True, False]:
@@ -1005,21 +989,11 @@ if __name__ == "__main__":
             else:
                 prefix="lp/"
             args.experiment_name = prefix+ base_exp_name
-            # if n_shot == 0 and not freeze_pretrained:
-            #     continue
-        #for downstream_task in ['roads']:
-        # for downstream_task in ['lc', 'lc_classification', 'building', 'roads']:
-        #    args.downstream_task = downstream_task
-        #    args.output_channels = 1 if 'building' in args.downstream_task or 'roads' in args.downstream_task else 11
-        #    args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
 
             print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")
             main(**vars(args))
-                
-            #args.model_name = args.model_name.replace('_classifier', '')
 
     else:
-        # JUST RUN WITH YAML ARGS
         main(**vars(args))
 
     print('Finished')

@@ -1,25 +1,19 @@
 # Standard Library
 import os
-from tqdm import tqdm
-import builtins
-
-from matplotlib import pyplot as plt
-
-# import PyQt5
-# matplotlib.use('QtAgg') 
-from tabulate import tabulate
-
-# PyTorch
 import torch
+import wandb
+import json
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributed as dist
+
+# PyTorch
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler, autocast
-# from torch.amp import GradScaler, autocast
+from matplotlib import pyplot as plt
 from torchvision import transforms
-import numpy as np
-import json
-import torch.distributed as dist
 
 # utils
 from utils import visualize
@@ -47,7 +41,7 @@ class TrainBase():
                  test_loader: DataLoader, inference_loader: DataLoader, epochs:int = 50, early_stop:int=25, lr: float = 0.001, lr_scheduler: str = None, warmup:bool=True,
                  metrics: list = None, name: str="model", out_folder :str ="trained_models/", visualise_validation:bool=True, 
                  warmup_steps:int=5, warmup_gamma:int=10, pos_weight:np.array=None, weights:np.array=None, save_info_vars:tuple = None, apply_zoom:bool=False, 
-                 climate_segm:bool=False, fixed_task:str=None, rank:int=None, min_lr:float=1e-6, perceptual_loss:bool=False, num_classes:int=4):
+                 climate_segm:bool=False, fixed_task:str=None, rank:int=None, min_lr:float=1e-6, perceptual_loss:bool=False, num_classes:int=4, wandb_run = None):
         
         self.train_mode = 'fp32' # choose between 'fp32', 'amp', 'fp16'
         self.val_mode = 'fp32' # choose between 'fp32', 'amp', 'fp16'
@@ -106,6 +100,7 @@ class TrainBase():
         self.criterion = self.set_criterion()
         self.scaler, self.optimizer = self.set_optimizer()
         self.scheduler = self.set_scheduler()
+        self.wandb_run = wandb_run
 
         if self.warmup and warmup_gamma is not None:
             multistep_milestone =  list(range(1, self.warmup_steps+1))
@@ -284,14 +279,21 @@ class TrainBase():
 
             train_loss += loss.item()
 
-            # display progress on console
-            train_pbar.set_postfix({
-                "loss": f"{train_loss / (i + 1):.4f}",
-                f"lr": self.optimizer.param_groups[0]['lr']})
+            avg_loss = train_loss / (i + 1)
+            lr = self.optimizer.param_groups[0]['lr']
 
-            # # Update the scheduler
+            train_pbar.set_postfix({"loss": f"{avg_loss:.4f}", "lr": lr})
+
+            # wandb logging per batch (optional)
+            if self.wandb_run is not None:
+                wandb.log({"train/loss": loss.item(), "train/lr": lr, "epoch": epoch + 1})
+
             if self.lr_scheduler == 'cosine_annealing':
                 s.step()
+
+        # wandb logging per epoch
+        if self.wandb_run is not None:
+            wandb.log({"train/epoch_loss": train_loss / (i + 1), "epoch": epoch + 1})
 
         return i, train_loss
 
@@ -315,18 +317,32 @@ class TrainBase():
                 loss = self.get_loss(images, labels)
                 val_loss += loss.item()
 
-                # display progress on console
-                val_pbar.set_postfix({
-                    "loss": f"{val_loss / (j + 1):.4f}",
-                    f"lr": self.optimizer.param_groups[0]['lr']})
+                avg_loss = val_loss / (j + 1)
+                lr = self.optimizer.param_groups[0]['lr']
+
+                val_pbar.set_postfix({"loss": f"{avg_loss:.4f}", "lr": lr})
+
+                # wandb logging per batch (optional)
+                if self.wandb_run is not None:
+                    wandb.log({"val/loss": loss.item(), "val/lr": lr, "epoch": epoch + 1})
 
             if self.visualise_validation:
                 outputs = self.model(images)
-
-                if type(outputs) is tuple:
+                if isinstance(outputs, tuple):
                     outputs = outputs[0]
 
-                self.val_visualize(images.detach().cpu().numpy(), labels.detach().cpu().numpy(), outputs.detach().cpu().numpy(), name=f'/val_images/val_{epoch}')
+                self.val_visualize(images.detach().cpu().numpy(),
+                                   labels.detach().cpu().numpy(),
+                                   outputs.detach().cpu().numpy(),
+                                   name=f'/val_images/val_{epoch}')
+
+                # wandb image logging
+                if self.wandb_run is not None:
+                    wandb.log({"val/image": wandb.Image(f"{self.out_folder}/val_images/val_{epoch}.png")})
+
+            # wandb logging per epoch
+            if self.wandb_run is not None:
+                wandb.log({"val/epoch_loss": val_loss / (j + 1), "epoch": epoch + 1})
 
             return j, val_loss
 
