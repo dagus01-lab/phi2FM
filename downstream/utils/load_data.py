@@ -4,7 +4,7 @@ import buteo as beo
 import numpy as np
 
 from typing import Tuple, Optional
-from terratorch.models.backbones.terramind.model.terramind_register import v1_pretraining_mean, v1_pretraining_std
+# from terratorch.models.backbones.terramind.model.terramind_register import v1_pretraining_mean, v1_pretraining_std
 
 from utils import config_lc
 from utils import Prithvi_100M_config
