@@ -53,8 +53,8 @@ class TerraMindSegmenter(nn.Module):
     def forward(self, x):
         x = self.model(x)
 
-        # TODO: Check why list is returned
-        x = x[0]
+        # Getting output after final layer only
+        x = x[-1]
 
         # reshape into 2d features
         x = self.reshape(x)

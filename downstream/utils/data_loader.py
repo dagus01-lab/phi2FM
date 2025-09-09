@@ -854,7 +854,7 @@ def get_zarr_dataloader(
             "Mismatch in lengths of split subsets and callbacks"
 
     # TODO: Remove hard-coded batch size.
-    batch_size = 16
+    batch_size = batch_size
     dataset = PhiSatDataset(
         zarr_path=zarr_path,
         dataset_set=dataset_set,
@@ -875,33 +875,19 @@ def get_zarr_dataloader(
     weights, pos_weights = dataset.class_weights, dataset.pos_weights
     print(f"weights: {weights}, pos_weights:{pos_weights}")
 
-    print("after dataset call", dataset.patches[0])
-
     if not split is None:
         sub_datasets = dataset.split_by_percentages(split=split, split_names = split_names)
         dataloaders = []
         for idx, sub_dataset in enumerate(sub_datasets):
 
-            print("subdataset", sub_dataset.patches[0])
-
             if n_shot[idx] != 0:
-                # TODO: data loading error in the following line
+                # TODO: data loading error in the following line for e.g. roads, land use
                 sub_dataset._cluster_and_nshot(n_shots=n_shot[idx], n_regions=sub_dataset.n_regions, strategy=sub_dataset.n_shot_strategy, seed=SEED)
                 #sub_dataset.get_n_shots(strategy='stratified', n=n_shot[idx], seed=SEED)
-            print("subdataset 2", sub_dataset.patches[0])
 
             sub_dataset.callback_pre_augmentation=callback_pre_augmentation[idx]
-            print("subdataset 3", sub_dataset.patches[0])
             sub_dataset.callback_post_augmentation=callback_post_augmentation[idx]
-            print("subdataset 4", sub_dataset.patches[0])
             sub_dataset.augmentations=augmentations[idx]
-            print("subdataset 5", sub_dataset.patches[0])
-
-            # subdataset ('0003607', 0, 0)
-            # subdataset 2 ('0', '0', '0', '0', '9', '1', '7')
-            # subdataset 3 ('0', '0', '0', '0', '9', '1', '7')
-            # subdataset 4 ('0', '0', '0', '0', '9', '1', '7')
-            # subdataset 5 ('0', '0', '0', '0', '9', '1', '7')
 
             dataloaders.append(
                 DataLoader(
@@ -914,9 +900,6 @@ def get_zarr_dataloader(
                     generator=generator
                 )
             )
-
-        print("if", next(iter(dataloaders[0])))
-
         return weights, pos_weights, *dataloaders
     else:
         dataset.callback_pre_augmentation=callback_pre_augmentation

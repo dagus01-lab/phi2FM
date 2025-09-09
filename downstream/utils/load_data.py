@@ -760,7 +760,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
         weight, pos_weight, dl_train, dl_val, dl_test = get_zarr_dataloader(
             zarr_path=dataset_path,                     # Path to the Zarr archive
             dataset_set="trainval",                 # Dataset subset to use
-            batch_size=16,                           # Number of samples per batch
+            batch_size=batch_size,                           # Number of samples per batch
             shuffle=True,                            # Enable shuffling (useful for training)
             num_workers=4,                           # Number of parallel workers for loading
             #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
@@ -789,7 +789,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
         weight, pos_weight, dl_train, dl_val = get_zarr_dataloader(
             zarr_path=dataset_path,                     # Path to the Zarr archive
             dataset_set="trainval",                 # Dataset subset to use
-            batch_size=16,                           # Number of samples per batch
+            batch_size=batch_size,                           # Number of samples per batch
             shuffle=True,                            # Enable shuffling (useful for training)
             # TODO: Increase number of workers
             num_workers=4,                           # Number of parallel workers for loading
