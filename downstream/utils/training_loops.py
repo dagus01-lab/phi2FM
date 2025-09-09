@@ -206,7 +206,7 @@ class TrainBase():
     def get_loss(self, images, labels):
         outputs = self.model(images)
         loss = self.criterion(outputs, labels)
-        return loss
+        return loss, outputs
     
     def get_metrics(self, images=None, labels=None, running_metric=None, k=None):
         
@@ -272,7 +272,7 @@ class TrainBase():
             self.optimizer.zero_grad()
             # get loss
             with autocast(dtype=torch.float16):
-                loss = self.get_loss(images, labels)
+                loss, _ = self.get_loss(images, labels)
                 self.scaler.scale(loss).backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
@@ -314,7 +314,7 @@ class TrainBase():
                 # Move inputs and targets to the device (GPU)
                 images, labels = images.to(self.device), labels.to(self.device)
                 # get loss
-                loss = self.get_loss(images, labels)
+                loss, outputs = self.get_loss(images, labels)
                 val_loss += loss.item()
 
                 avg_loss = val_loss / (j + 1)
@@ -327,7 +327,6 @@ class TrainBase():
                     wandb.log({"val/loss": loss.item(), "val/lr": lr, "epoch": epoch + 1})
 
             if self.visualise_validation:
-                outputs = self.model(images)
                 if isinstance(outputs, tuple):
                     outputs = outputs[0]
 
