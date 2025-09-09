@@ -14,7 +14,10 @@ from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler, autocast
 from matplotlib import pyplot as plt
 from torchvision import transforms
-from sklearn.metrics import f1_score
+from sklearn.metrics import (
+    f1_score, precision_score, recall_score,
+    confusion_matrix, accuracy_score, jaccard_score
+)
 
 # utils
 from utils import visualize
@@ -334,61 +337,107 @@ class TrainBase():
                     wandb.log({"val/loss": loss.item(), "val/lr": lr, "epoch": epoch + 1})
 
             # Concatenate predictions and labels
-            all_preds = torch.cat(all_preds)
-            all_labels = torch.cat(all_labels)
+            all_preds = torch.cat(all_preds)  # (N, C, H, W)
+            all_labels = torch.cat(all_labels)  # (N, C, H, W) one-hot OR (N, H, W) indices
 
-            # Compute MSE
-            mse = F.mse_loss(all_preds, all_labels).item()
+            # No NaNs/Infs
+            assert torch.isfinite(all_preds).all(), "NaNs/Infs in predictions"
+            assert torch.isfinite(all_labels).all(), "NaNs/Infs in labels"
 
-            # Compute Micro F1 Score
-            y_true = all_labels.numpy()
-            y_pred = all_preds.numpy()
+            num_classes = all_preds.shape[1]
+            # Turn predicted logits/probabilities into class indices: (N, H, W)
+            pred_classes = all_preds.argmax(dim=1)  # int64
 
-            try:
-                if y_pred.ndim > 1 and y_pred.shape[1] > 1:
-                    # Multi-class classification
-                    pred_classes = y_pred.argmax(axis=1)
-                    true_classes = y_true.astype(int)
-                    micro_f1 = f1_score(true_classes, pred_classes, average='micro')
+            # Turn labels into class indices: handle (N,C,H,W) one-hot or (N,H,W) indices
+            if all_labels.ndim == 4 and all_labels.shape[1] == num_classes:
+                true_classes = all_labels.argmax(dim=1).long()  # (N,H,W)
+            elif all_labels.ndim == 3:
+                true_classes = all_labels.long()  # (N,H,W)
+            else:
+                raise ValueError(
+                    f"Labels must be (N,C,H,W) one-hot or (N,H,W) indices, got {tuple(all_labels.shape)}"
+                )
 
-                elif y_pred.ndim == 1 or y_pred.shape[1] == 1:
-                    # Binary classification
-                    pred_classes = (y_pred > 0.5).astype(int)
-                    true_classes = y_true.astype(int)
-                    micro_f1 = f1_score(true_classes, pred_classes, average='micro')
+            # OPTIONAL: if you have an ignore label (e.g., 255 or -100), mask it out here
+            ignore_index = None  # set to e.g., 255 or -100 if you use one
+            if ignore_index is not None:
+                mask = (true_classes != ignore_index)
+            else:
+                mask = torch.ones_like(true_classes, dtype=torch.bool)
 
-                elif y_pred.ndim == 2 and y_true.ndim == 2:
-                    # Multi-label classification
-                    pred_classes = (y_pred > 0.5).astype(int)
-                    true_classes = y_true.astype(int)
-                    micro_f1 = f1_score(true_classes, pred_classes, average='micro')
+            # Flatten for sklearn
+            y_true_flat = true_classes[mask].view(-1).cpu().numpy()
+            y_pred_flat = pred_classes[mask].view(-1).cpu().numpy()
 
+            # If some classes are never present, it's safer to specify labels explicitly
+            labels_list = list(range(num_classes))
+
+            # --- Core metrics ---
+            acc = accuracy_score(y_true_flat, y_pred_flat)
+
+            micro_f1 = f1_score(y_true_flat, y_pred_flat, average='micro', labels=labels_list)
+            macro_f1 = f1_score(y_true_flat, y_pred_flat, average='macro', labels=labels_list)
+            per_class_f1 = f1_score(y_true_flat, y_pred_flat, average=None, labels=labels_list)
+
+            # mIoU (mean Jaccard) and per-class IoU
+            miou = jaccard_score(y_true_flat, y_pred_flat, average='macro', labels=labels_list)
+            per_class_iou = jaccard_score(y_true_flat, y_pred_flat, average=None, labels=labels_list)
+            macro_prec = precision_score(y_true_flat, y_pred_flat, average='macro', labels=labels_list, zero_division=0)
+            macro_rec = recall_score(y_true_flat, y_pred_flat, average='macro', labels=labels_list, zero_division=0)
+            per_class_prec = precision_score(y_true_flat, y_pred_flat, average=None, labels=labels_list,
+                                             zero_division=0)
+            per_class_rec = recall_score(y_true_flat, y_pred_flat, average=None, labels=labels_list, zero_division=0)
+
+            # Confusion Matrix
+            cm = confusion_matrix(y_true_flat, y_pred_flat, labels=labels_list)
+
+            # NOTE: Your current MSE between raw logits and one-hot labels is not a standard metric for multiclass.
+            # If you want to keep a regression-like diagnostic, at least compare softmax probabilities vs one-hot:
+            with torch.no_grad():
+                probs = F.softmax(all_preds, dim=1)
+                if all_labels.ndim == 3:
+                    # convert index labels to one-hot for MSE diagnostic
+                    one_hot = F.one_hot(true_classes, num_classes=num_classes).permute(0, 3, 1, 2).float()
                 else:
-                    raise ValueError(
-                        f"Unsupported shape for F1 computation: y_true={y_true.shape}, y_pred={y_pred.shape}")
-
-            except ValueError as e:
-                print(f"F1 score computation failed: {e}")
-                micro_f1 = float('nan')
+                    one_hot = all_labels.float()
+                mse = F.mse_loss(probs, one_hot).item()
 
             # Visualization
             if self.visualise_validation:
                 self.val_visualize(images.detach().cpu().numpy(),
-                                   labels.detach().cpu().numpy(),
-                                   outputs.detach().cpu().numpy(),
+                                   all_labels.detach().cpu().numpy(),
+                                   all_preds.detach().cpu().numpy(),
                                    name=f'/val_images/val_{epoch}')
-
                 if self.wandb_run is not None:
                     wandb.log({"val/image": wandb.Image(f"{self.out_folder}/val_images/val_{epoch}.png")})
 
-            # Final WandB logging
+            # WandB logging
             if self.wandb_run is not None:
+                # Scalar summaries
                 wandb.log({
                     "val/epoch_loss": val_loss / (j + 1),
-                    "val/mse": mse,
+                    "val/acc": acc,
                     "val/micro_f1": micro_f1,
+                    "val/macro_f1": macro_f1,
+                    "val/mIoU": miou,
+                    "val/mse_prob_vs_onehot": mse,
                     "epoch": epoch + 1
                 })
+                # Per-class tables/vectors (log as dict for easy plots)
+                wandb.log({
+                    "val/per_class_f1": {f"class_{c}": float(per_class_f1[c]) for c in range(num_classes)},
+                    "val/per_class_iou": {f"class_{c}": float(per_class_iou[c]) for c in range(num_classes)},
+                    "val/per_class_precision": {f"class_{c}": float(per_class_prec[c]) for c in range(num_classes)},
+                    "val/per_class_recall": {f"class_{c}": float(per_class_rec[c]) for c in range(num_classes)},
+                    "epoch": epoch + 1
+                })
+                # Confusion matrix
+                wandb.log({"val/confusion_matrix": wandb.plot.confusion_matrix(
+                    probs=None,
+                    y_true=y_true_flat.tolist(),
+                    preds=y_pred_flat.tolist(),
+                    class_names=[f"class_{c}" for c in labels_list]
+                )})
 
             return j, val_loss
 
