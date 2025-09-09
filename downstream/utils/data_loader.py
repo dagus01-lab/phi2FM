@@ -916,8 +916,6 @@ def get_zarr_dataloader(
             drop_last=drop_last
         )
 
-        print("else", next(iter(loader)))
-
         return weights, pos_weights, loader
 
 

@@ -304,9 +304,8 @@ class TrainBase():
 
 
     def v_loop(self, epoch):
-        # Initialize the progress bar for training
         val_pbar = tqdm(self.val_loader, total=len(self.val_loader),
-                          desc=f"Val {epoch + 1}/{self.epochs}")
+                        desc=f"Val {epoch + 1}/{self.epochs}")
 
         with torch.no_grad():
             self.model.eval()
@@ -334,22 +333,45 @@ class TrainBase():
                 if self.wandb_run is not None:
                     wandb.log({"val/loss": loss.item(), "val/lr": lr, "epoch": epoch + 1})
 
-            # Concatenate all predictions and labels
+            # Concatenate predictions and labels
             all_preds = torch.cat(all_preds)
             all_labels = torch.cat(all_labels)
 
             # Compute MSE
             mse = F.mse_loss(all_preds, all_labels).item()
 
-            # Compute Micro F1 Score (assuming classification)
-            # Convert logits to predicted class indices
-            if all_preds.ndim > 1 and all_preds.size(1) > 1:
-                pred_classes = torch.argmax(all_preds, dim=1)
-            else:
-                pred_classes = (all_preds > 0.5).long()  # for binary classification
+            # Compute Micro F1 Score
+            y_true = all_labels.numpy()
+            y_pred = all_preds.numpy()
 
-            micro_f1 = f1_score(all_labels.numpy(), pred_classes.numpy(), average='micro')
+            try:
+                if y_pred.ndim > 1 and y_pred.shape[1] > 1:
+                    # Multi-class classification
+                    pred_classes = y_pred.argmax(axis=1)
+                    true_classes = y_true.astype(int)
+                    micro_f1 = f1_score(true_classes, pred_classes, average='micro')
 
+                elif y_pred.ndim == 1 or y_pred.shape[1] == 1:
+                    # Binary classification
+                    pred_classes = (y_pred > 0.5).astype(int)
+                    true_classes = y_true.astype(int)
+                    micro_f1 = f1_score(true_classes, pred_classes, average='micro')
+
+                elif y_pred.ndim == 2 and y_true.ndim == 2:
+                    # Multi-label classification
+                    pred_classes = (y_pred > 0.5).astype(int)
+                    true_classes = y_true.astype(int)
+                    micro_f1 = f1_score(true_classes, pred_classes, average='micro')
+
+                else:
+                    raise ValueError(
+                        f"Unsupported shape for F1 computation: y_true={y_true.shape}, y_pred={y_pred.shape}")
+
+            except ValueError as e:
+                print(f"F1 score computation failed: {e}")
+                micro_f1 = float('nan')
+
+            # Visualization
             if self.visualise_validation:
                 self.val_visualize(images.detach().cpu().numpy(),
                                    labels.detach().cpu().numpy(),
@@ -359,6 +381,7 @@ class TrainBase():
                 if self.wandb_run is not None:
                     wandb.log({"val/image": wandb.Image(f"{self.out_folder}/val_images/val_{epoch}.png")})
 
+            # Final WandB logging
             if self.wandb_run is not None:
                 wandb.log({
                     "val/epoch_loss": val_loss / (j + 1),
