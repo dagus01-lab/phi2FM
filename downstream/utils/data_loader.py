@@ -312,8 +312,6 @@ class PhiSatDataset(Dataset):
                 #self.sample_ids = json.load(f)
                 patches =  json.load(f)
             if self.patch_size:
-                print("if self.patch_size")
-                exit()
                 self.patches = [tuple(p) for p in patches]
                 self.sample_ids = [p[0] for p in self.patches]
             else:

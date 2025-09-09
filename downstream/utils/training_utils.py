@@ -196,8 +196,8 @@ class SE_Block(nn.Module):
 
     def forward(self, x):
         bs, c, _, _ = x.shape
-        y = self.squeeze(x).view(bs, c)
-        y = self.excitation(y).view(bs, c, 1, 1)
+        y = self.squeeze(x).reshape(bs, c)
+        y = self.excitation(y).reshape(bs, c, 1, 1)
 
         return x * y.expand_as(x)
 

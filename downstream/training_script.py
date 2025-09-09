@@ -384,7 +384,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
 
     elif "terramind" in model_name:
         classify = False if "classifier" not in model_name else True
-        return terramind(freeze_body=freeze, classifier=classify)
+        return terramind(output_dim=output_channels, freeze_body=freeze, classifier=classify)
 
     elif model_name == 'vit_cnn':
         sd = torch.load(path_model_weights, map_location=device)
@@ -783,9 +783,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         weights_dir=downstream_task,
         patch_size=patch_size,
     )
-
-    print(next(iter(dl_train)))
-    exit()
 
     #print(f"Weight: {weights}, position weight:{pos_weight}")
         

@@ -9,19 +9,17 @@
 # DeiT: https://github.com/facebookresearch/deit
 # --------------------------------------------------------
 
-import torch
 import torch.nn as nn
-import numpy as np
 
-from timm.models.vision_transformer import Block
-from timm.models.layers import to_2tuple
-from functools import partial
 from terratorch.registry import BACKBONE_REGISTRY
 from terratorch.models.backbones.terramind.model.terramind_register import v1_pretraining_mean, v1_pretraining_std
 
 from models.model_DecoderUtils import CoreDecoder
 
 
+# TODO: Update mean and std for TerraMind in the code,
+#  check how decoders work,
+#  think about CLS token for downstream task
 class TerraMindSegmenter(nn.Module):
     """
     TerraMind with pre-defined decoder head.
@@ -52,11 +50,33 @@ class TerraMindSegmenter(nn.Module):
         # Separate channel axis
         N, L, D = x.shape
         x = x.permute(0, 2, 1)
-        x = x.view(N, D, int(L ** 0.5), int(L ** 0.5))
+        x = x.reshape(N, D, int(L ** 0.5), int(L ** 0.5))
         return x
 
     def forward(self, x):
-        return self.model(x)
+        x = self.model(x)
+
+        print(len(x))
+        print(x[0].shape)
+
+        x = x[0]
+
+        # exit()
+
+        # reshape into 2d features
+        x = self.reshape(x)
+
+        print(x.shape)
+
+        x = self.decoder_downsample_block(x)
+
+        print(x.shape)
+
+        y = self.decoder_head(x)
+
+        print(y.shape)
+
+        return y
 
 
 class TerraMindClassifier(nn.Module):
@@ -73,7 +93,13 @@ class TerraMindClassifier(nn.Module):
                                                  )
 
     def forward(self, x):
-        return self.model(x)
+        x = self.model(x)
+
+        # select cls token
+        x = x[:, 0, :]
+
+        y = self.classification_head(x)
+        return y
 
 
 def terramind(output_dim=1, decoder_norm='batch', decoder_padding='same',
