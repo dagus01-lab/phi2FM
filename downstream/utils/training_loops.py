@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler, autocast
 from matplotlib import pyplot as plt
 from torchvision import transforms
+from sklearn.metrics import f1_score
 
 # utils
 from utils import visualize
@@ -206,7 +207,7 @@ class TrainBase():
     def get_loss(self, images, labels):
         outputs = self.model(images)
         loss = self.criterion(outputs, labels)
-        return loss, outputs
+        return loss
     
     def get_metrics(self, images=None, labels=None, running_metric=None, k=None):
         
@@ -272,7 +273,7 @@ class TrainBase():
             self.optimizer.zero_grad()
             # get loss
             with autocast(dtype=torch.float16):
-                loss, _ = self.get_loss(images, labels)
+                loss = self.get_loss(images, labels)
                 self.scaler.scale(loss).backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
@@ -301,8 +302,8 @@ class TrainBase():
         visualize.visualize(x=images, y=labels, y_pred=outputs, images=5,
                             channel_first=True, vmin=0, vmax=1, save_path=f"{self.out_folder}/{name}.png")
 
-    def v_loop(self, epoch):
 
+    def v_loop(self, epoch):
         # Initialize the progress bar for training
         val_pbar = tqdm(self.val_loader, total=len(self.val_loader),
                           desc=f"Val {epoch + 1}/{self.epochs}")
@@ -310,38 +311,61 @@ class TrainBase():
         with torch.no_grad():
             self.model.eval()
             val_loss = 0
+            all_preds = []
+            all_labels = []
+
             for j, (images, labels) in enumerate(val_pbar):
-                # Move inputs and targets to the device (GPU)
                 images, labels = images.to(self.device), labels.to(self.device)
-                # get loss
-                loss, outputs = self.get_loss(images, labels)
+                loss = self.get_loss(images, labels)
                 val_loss += loss.item()
 
-                avg_loss = val_loss / (j + 1)
-                lr = self.optimizer.param_groups[0]['lr']
-
-                val_pbar.set_postfix({"loss": f"{avg_loss:.4f}", "lr": lr})
-
-                # wandb logging per batch (optional)
-                if self.wandb_run is not None:
-                    wandb.log({"val/loss": loss.item(), "val/lr": lr, "epoch": epoch + 1})
-
-            if self.visualise_validation:
+                # Collect predictions and labels
+                outputs = self.model(images)
                 if isinstance(outputs, tuple):
                     outputs = outputs[0]
 
+                all_preds.append(outputs.detach().cpu())
+                all_labels.append(labels.detach().cpu())
+
+                avg_loss = val_loss / (j + 1)
+                lr = self.optimizer.param_groups[0]['lr']
+                val_pbar.set_postfix({"loss": f"{avg_loss:.4f}", "lr": lr})
+
+                if self.wandb_run is not None:
+                    wandb.log({"val/loss": loss.item(), "val/lr": lr, "epoch": epoch + 1})
+
+            # Concatenate all predictions and labels
+            all_preds = torch.cat(all_preds)
+            all_labels = torch.cat(all_labels)
+
+            # Compute MSE
+            mse = F.mse_loss(all_preds, all_labels).item()
+
+            # Compute Micro F1 Score (assuming classification)
+            # Convert logits to predicted class indices
+            if all_preds.ndim > 1 and all_preds.size(1) > 1:
+                pred_classes = torch.argmax(all_preds, dim=1)
+            else:
+                pred_classes = (all_preds > 0.5).long()  # for binary classification
+
+            micro_f1 = f1_score(all_labels.numpy(), pred_classes.numpy(), average='micro')
+
+            if self.visualise_validation:
                 self.val_visualize(images.detach().cpu().numpy(),
                                    labels.detach().cpu().numpy(),
                                    outputs.detach().cpu().numpy(),
                                    name=f'/val_images/val_{epoch}')
 
-                # wandb image logging
                 if self.wandb_run is not None:
                     wandb.log({"val/image": wandb.Image(f"{self.out_folder}/val_images/val_{epoch}.png")})
 
-            # wandb logging per epoch
             if self.wandb_run is not None:
-                wandb.log({"val/epoch_loss": val_loss / (j + 1), "epoch": epoch + 1})
+                wandb.log({
+                    "val/epoch_loss": val_loss / (j + 1),
+                    "val/mse": mse,
+                    "val/micro_f1": micro_f1,
+                    "epoch": epoch + 1
+                })
 
             return j, val_loss
 
