@@ -25,13 +25,13 @@ warmup_gamma: 10
 min_lr: null
 pretrained_model_path: not_required_due_to_terratorch # **********************************
 freeze_pretrained: True
-data_path_128_10m: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/burned.zarr
-data_path_224_10m: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/burned.zarr
-data_path_224_30m: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/burned.zarr
+data_path_128_10m: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/
+data_path_224_10m: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/
+data_path_224_30m: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/
 train_mode: train_test                      # train_test, train_test_inference, inference, train_inference
 downstream_model_path: null
-data_path_inference_128: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/burned.zarr
-data_path_inference_224: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/burned.zarr
+data_path_inference_128: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/
+data_path_inference_224: /opt/app-root/src/fm-geospatial/data/OEOBench-Burnt_Area_Dataset/
 output_path: ./output
 data_parallel: False
 device_ids: [0]
