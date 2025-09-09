@@ -1,28 +1,14 @@
-
-# Standard Library
-import os
-from glob import glob
-import lmdb
-import pickle
-
 # External Libraries
+import torch
 import buteo as beo
 import numpy as np
 
-# PyTorch
-import torch
-from torch.utils.data import Dataset, DataLoader, Subset, random_split
-from torch.utils.data.distributed import DistributedSampler
+from typing import Tuple, Optional
+from terratorch.models.backbones.terramind.model.terramind_register import v1_pretraining_mean, v1_pretraining_std
 
 from utils import config_lc
 from utils import Prithvi_100M_config
 from utils.data_loader import get_zarr_dataloader, AugmentationRotationXY, AugmentationMirrorXY, AugmentationNoiseNormal
-
-import random
-from torchvision import transforms
-import math
-import torch.nn.functional as F
-from typing import Tuple, Optional
 
 
 # statistics used to normalize images before passing to the model

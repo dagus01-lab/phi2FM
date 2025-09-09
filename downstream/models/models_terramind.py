@@ -12,7 +12,6 @@
 import torch.nn as nn
 
 from terratorch.registry import BACKBONE_REGISTRY
-from terratorch.models.backbones.terramind.model.terramind_register import v1_pretraining_mean, v1_pretraining_std
 
 from models.model_DecoderUtils import CoreDecoder
 
