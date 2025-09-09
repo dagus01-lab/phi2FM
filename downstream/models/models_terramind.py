@@ -17,9 +17,6 @@ from terratorch.models.backbones.terramind.model.terramind_register import v1_pr
 from models.model_DecoderUtils import CoreDecoder
 
 
-# TODO: Update mean and std for TerraMind in the code,
-#  check how decoders work,
-#  think about CLS token for downstream task
 class TerraMindSegmenter(nn.Module):
     """
     TerraMind with pre-defined decoder head.
@@ -56,26 +53,13 @@ class TerraMindSegmenter(nn.Module):
     def forward(self, x):
         x = self.model(x)
 
-        print(len(x))
-        print(x[0].shape)
-
+        # TODO: Check why list is returned
         x = x[0]
-
-        # exit()
 
         # reshape into 2d features
         x = self.reshape(x)
-
-        print(x.shape)
-
         x = self.decoder_downsample_block(x)
-
-        print(x.shape)
-
         y = self.decoder_head(x)
-
-        print(y.shape)
-
         return y
 
 
