@@ -60,9 +60,7 @@ class TerraMindClassifier(nn.Module):
         return y
 
 
-def terramind(output_dim=1, decoder_norm='batch', decoder_padding='same',
-            decoder_activation='relu', decoder_depths=[2, 2, 8, 2], decoder_dims=[160, 320, 640, 1280], freeze_body=True,
-            classifier=False, inference=False):
+def terramind(output_dim=1, freeze_body=True, classifier=False):
 
     model = BACKBONE_REGISTRY.build(
         "terramind_v1_base",

@@ -322,7 +322,7 @@ class TrainBase():
                 val_loss += loss.item()
 
                 # Collect predictions and labels
-                outputs = self.model(images)
+                outputs = self.model(images).output
                 if isinstance(outputs, tuple):
                     outputs = outputs[0]
 
@@ -1256,7 +1256,7 @@ class TrainSegmentationBurned(TrainBase):
         # 1) Forward pass → raw logits
         #print(images.shape)
          #print(outputs.shape)
-        outputs = self.model(images)  # shape [B, 4, H, W]
+        outputs = self.model(images).output  # shape [B, 4, H, W]
     
         # 2) Convert one-hot (or channel‑first mask) to integer indices [B, H, W]
         #    If your labels come in as one-hot: labels.shape == [B, 4, H, W]
@@ -1398,7 +1398,7 @@ class TrainSegmentationBurned(TrainBase):
 
         # Otherwise, compute the confusion matrix from model predictions
         else:
-            outputs = self.model(images)
+            outputs = self.model(images).output
             outputs = torch.argmax(outputs, dim=1).long()
             labels = torch.argmax(labels, dim=1).long()
             #outputs = outputs.argmax(axis=1).flatten()
