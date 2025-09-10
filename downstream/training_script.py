@@ -701,7 +701,8 @@ def main(experiment_name,
         }
 
         input_size_total = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
-        model_summary = summary(model, input_size=input_size_total, dtypes=[torch.float32])
+        # model_summary = summary(model, input_size=input_size_total, dtypes=[torch.float32])
+        model_summary = None
 
         if model_device == 'cpu':
             model.to(model_device)
