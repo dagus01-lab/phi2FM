@@ -80,21 +80,21 @@ MODEL_LIST = CNN_LIST + MIXER_LIST + VIT_LIST + CNN_PRETRAINED_LIST + VIT_CNN_LI
 DOWNSTREAM_LIST = ['lc', 'building', 'roads', 'lc_classification', 'building_classification', 'roads_classification', 'fire', 'burned_area', 'worldfloods', 'clouds']
 
 
-def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_scheduler, warmup, early_stop, dl_train,
+def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_scheduler, early_stop, dl_train,
                 dl_val, dl_test, dl_inference, NAME, OUTPUT_FOLDER, vis_val, warmup_steps, warmup_gamma, pos_weight, 
                 weights, save_info_vars, wandb_run, rank=None, min_lr=None):
     
     if model_name in (CNN_LIST + MIXER_LIST + VIT_CNN_LIST + CNN_PRETRAINED_LIST + VIT_CNN_PRETRAINED_LIST):
         if downstream_task == 'roads' or downstream_task == 'building':
             trainer = training_loops.TrainBase(epochs=epochs, lr=lr, model=model, device=device,
-                                               lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                               lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                train_loader=dl_train,
                                                val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars, wandb_run=wandb_run)
         elif downstream_task == 'coords':
             trainer = training_loops.TrainGeoLocate(epochs=epochs, lr=lr, model=model, device=device,
-                                                    lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                    lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                     train_loader=dl_train,
                                                     val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                     out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -102,14 +102,14 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
             
         elif downstream_task == 'lc':
             trainer = training_loops.TrainLandCover(epochs=epochs, lr=lr, model=model, device=device,
-                                                    lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                    lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                     train_loader=dl_train,
                                                     val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                     out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                     warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars, wandb_run=wandb_run)
         elif downstream_task == 'building_classification':
             trainer = training_loops.TrainClassificationBuildings(epochs=epochs, lr=lr, model=model, device=device,
-                                                                  lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                                  lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                                   train_loader=dl_train,
                                                                   val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                                   out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -118,7 +118,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
 
         elif downstream_task == 'lc_classification':
             trainer = training_loops.TrainClassificationLC(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -127,7 +127,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
 
         elif downstream_task == 'roads_classification':
             trainer = training_loops.TrainClassificationRoads(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -136,7 +136,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
         elif downstream_task == 'fire':
             print(f"yes: {model_name}")
             trainer = training_loops.TrainClassificationFire(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -144,7 +144,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'burned_area':
             trainer = training_loops.TrainSegmentationBurned(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -152,7 +152,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'clouds':
             trainer = training_loops.TrainCloudSegmentation(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train, num_classes=5,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -160,7 +160,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'worldfloods':
             trainer = training_loops.TrainSegmentationWorldfloods(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -170,14 +170,14 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
     elif model_name in (VIT_LIST):
         if downstream_task == 'roads' or downstream_task == 'building' or downstream_task=='burned_area':
             trainer = training_loops.TrainViT(epochs=epochs, lr=lr, model=model, device=device,
-                                              lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop, train_loader=dl_train,
+                                              lr_scheduler=lr_scheduler, early_stop=early_stop, train_loader=dl_train,
                                               val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                               out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                               warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, wandb_run=wandb_run)
 
         elif downstream_task == 'lc':
             trainer = training_loops.TrainViTLandCover(epochs=epochs, lr=lr, model=model, device=device,
-                                                       lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                       lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                        train_loader=dl_train,
                                                        val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                        out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -185,7 +185,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
 
     if model_name == 'core_vae_nano':
         trainer = training_loops.TrainVAE(epochs=epochs, lr=lr, model=model, device=device,
-                                          lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                          lr_scheduler=lr_scheduler, early_stop=early_stop,
                                           train_loader=dl_train,
                                           val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                           out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -474,7 +474,6 @@ def get_args():
     parser.add_argument('--early_stop', type=int, default=50, help='set training loop patience for early stopping')
     parser.add_argument('--lr_scheduler', type=str, default=None,
                         choices=[None, 'reduce_on_plateau', 'cosine_annealing'], help='select learning rate scheduler')
-    parser.add_argument('--warmup', action="store_true", help='Enables linear 5 epoch warmup scheduler')
     parser.add_argument('--model_device', default=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
                         help='select training device')
     parser.add_argument('--generator_device', default=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
@@ -538,7 +537,6 @@ def main(experiment_name,
          split_ratio,
          regions,
          vis_val,
-         warmup,
          warmup_steps,
          warmup_gamma,
          pretrained_model_path,
@@ -844,8 +842,6 @@ def main(experiment_name,
     # Get learning rate
     init_lr = lr
     assert (min_lr is None) != (warmup_gamma is None), 'min_lr and warmup_gamma cannot be used together'
-    if warmup and warmup_gamma is not None:
-        lr = lr / int(( 10 )**(warmup_steps))  # for warmup start
 
 
     trainer = get_trainer(
@@ -856,7 +852,6 @@ def main(experiment_name,
         model=model,
         device=model_device,
         lr_scheduler=lr_scheduler,
-        warmup=warmup,
         early_stop=early_stop,
         dl_train=dl_train,
         dl_val=dl_val,
@@ -869,7 +864,7 @@ def main(experiment_name,
         warmup_gamma=warmup_gamma,
         pos_weight=pos_weight,
         weights=weights,
-        save_info_vars=(model_summary, n_shot, split_ratio, warmup, init_lr),
+        save_info_vars=(model_summary, n_shot, split_ratio, init_lr),
         rank=world_rank,
         min_lr=min_lr,
         wandb_run=wandb_run
@@ -889,7 +884,6 @@ def main(experiment_name,
             model_summary=model_summary,
             n_shot=n_shot,
             p_split=split_ratio,
-            warmup=warmup,
             lr=init_lr
         )
         trainer.inference()
@@ -902,7 +896,6 @@ def main(experiment_name,
             model_summary=model_summary,
             n_shot=n_shot,
             p_split=split_ratio,
-            warmup=warmup,
             lr=init_lr
         )
 

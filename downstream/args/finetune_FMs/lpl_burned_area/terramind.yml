@@ -8,7 +8,7 @@ model_device: mps
 generator_device: mps
 num_workers: 4
 early_stop: 15
-epochs: 20
+epochs: 100
 input_channels: 13
 output_channels: 4
 input_size: 224
@@ -19,8 +19,7 @@ n_shot: [50, 100, 500, 1000, 5000] #null # ok?
 split_ratio: null #1.
 regions: null
 vis_val: True
-warmup: False
-warmup_steps: 2
+warmup_steps: 5
 warmup_gamma: 10
 min_lr: null
 pretrained_model_path: not_required_due_to_terratorch # **********************************

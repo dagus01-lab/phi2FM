@@ -43,7 +43,7 @@ def convert_to_builtin_types(obj):
 class TrainBase():
 
     def __init__(self, model: nn.Module, device: torch.device, train_loader: DataLoader, val_loader: DataLoader,
-                 test_loader: DataLoader, inference_loader: DataLoader, epochs:int = 50, early_stop:int=25, lr: float = 0.001, lr_scheduler: str = None, warmup:bool=True,
+                 test_loader: DataLoader, inference_loader: DataLoader, epochs:int = 50, early_stop:int=25, lr: float = 0.001, lr_scheduler: str = None,
                  metrics: list = None, name: str="model", out_folder :str ="trained_models/", visualise_validation:bool=True, 
                  warmup_steps:int=5, warmup_gamma:int=10, pos_weight:np.array=None, weights:np.array=None, save_info_vars:tuple = None, apply_zoom:bool=False, 
                  climate_segm:bool=False, fixed_task:str=None, rank:int=None, min_lr:float=1e-6, perceptual_loss:bool=False, num_classes:int=4, wandb_run = None):
@@ -89,7 +89,6 @@ class TrainBase():
         self.inference_loader = inference_loader
         self.metrics = metrics
         self.lr_scheduler = lr_scheduler
-        self.warmup = warmup
         self.warmup_steps = warmup_steps
         self.name = name
         self.out_folder = out_folder
@@ -108,7 +107,7 @@ class TrainBase():
         self.wandb_run = wandb_run
 
         # Save Info vars
-        self.model_summary, self.n_shot, self.split_ratio, self.warmup, self.init_lr = save_info_vars
+        self.model_summary, self.n_shot, self.split_ratio, self.init_lr = save_info_vars
         
         self.test_metrics = None
                 
@@ -588,14 +587,13 @@ class TrainBase():
             json.dump(artifacts, outfile, indent=4)
 
 
-    def save_info(self, model_summary=None, n_shot=None, p_split=None, warmup=None, lr=None):
+    def save_info(self, model_summary=None, n_shot=None, p_split=None, lr=None):
         print("Saving artifacts...")
         artifacts = {
             'training_parameters': {
                 'model': self.name,
                 'lr': lr,
                 'scheduler': self.lr_scheduler,
-                'warm_up': warmup,
                 'optimizer': str(self.optimizer).split(' (')[0],
                 'device': str(self.device),
                 'training_epochs': self.epochs,
