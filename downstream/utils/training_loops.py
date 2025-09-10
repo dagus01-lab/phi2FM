@@ -107,20 +107,6 @@ class TrainBase():
         self.scheduler = self.set_scheduler()
         self.wandb_run = wandb_run
 
-        if self.warmup and warmup_gamma is not None:
-            multistep_milestone =  list(range(1, self.warmup_steps+1))
-            self.scheduler_warmup = torch.optim.lr_scheduler.MultiStepLR(
-                self.optimizer, milestones=multistep_milestone, gamma=(warmup_gamma))
-            
-        elif self.warmup and self.min_lr is not None:
-            def warmup_linear(epoch):
-                if epoch < warmup_steps:
-                    # Linear increase from `min_lr / max_lr` to `1.0` over `warmup_steps`
-                    return (self.min_lr + (self.learning_rate - self.min_lr) * (epoch / warmup_steps)) / self.learning_rate
-                return 1.0  # After warmup, maintain the learning rate (no scaling)
-
-            self.scheduler_warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=warmup_linear)
-
         # Save Info vars
         self.model_summary, self.n_shot, self.split_ratio, self.warmup, self.init_lr = save_info_vars
         
@@ -198,7 +184,7 @@ class TrainBase():
             # Warmup scheduler: linearly increase LR from 0 to base LR
             warmup_scheduler = LinearLR(
                 self.optimizer,
-                start_factor=0.0001,
+                start_factor=0.1,
                 end_factor=1.0,
                 total_iters=self.warmup_steps,
             )
@@ -309,9 +295,6 @@ class TrainBase():
             # wandb logging per batch (optional)
             if self.wandb_run is not None:
                 wandb.log({"train/loss": loss.item(), "train/lr": lr, "epoch": epoch + 1})
-
-            if self.lr_scheduler == 'cosine_annealing':
-                s.step()
 
         # wandb logging per epoch
         if self.wandb_run is not None:
@@ -512,14 +495,6 @@ class TrainBase():
 
         # Training loop
         for epoch in range(self.epochs):
-            if epoch == 0 and self.warmup == True:
-                s = self.scheduler_warmup
-                print('Starting linear warmup phase')
-            elif epoch == self.warmup_steps and self.warmup == True:
-                s = self.scheduler
-                self.warmup = False
-                print('Warmup finished')
-
             i, train_loss = self.t_loop(epoch, s)
             if epoch % 3 == 0:
                 j, val_loss = self.v_loop(epoch)
@@ -530,10 +505,12 @@ class TrainBase():
             self.lr.append(self.optimizer.param_groups[0]['lr'])
 
             # Update the scheduler
-            if self.warmup:
-                s.step()
-            elif self.lr_scheduler == 'reduce_on_plateau':
+            if self.lr_scheduler == 'reduce_on_plateau':
                 s.step(self.vl[-1])
+            elif self.lr_scheduler == 'cosine_annealing':
+                self.scheduler.step()
+            else:
+                raise NotImplementedError
 
             #save check point
             self.save_ckpt(epoch, val_loss / (j + 1))
@@ -1426,8 +1403,6 @@ class TrainSegmentationBurned(TrainBase):
             outputs = self.model(images)
             outputs = torch.argmax(outputs, dim=1).long()
             labels = torch.argmax(labels, dim=1).long()
-            print(outputs.shape)
-            print(labels.shape)
             #outputs = outputs.argmax(axis=1).flatten()
             #labels = labels.squeeze().flatten()
 
