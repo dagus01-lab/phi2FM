@@ -12,8 +12,9 @@
 import torch.nn as nn
 
 from terratorch.registry import BACKBONE_REGISTRY
+from terratorch.models import EncoderDecoderFactory
 
-from models.model_DecoderUtils import CoreDecoder
+# from models.model_DecoderUtils import CoreDecoder
 
 
 class TerraMindSegmenter(nn.Module):
@@ -32,34 +33,8 @@ class TerraMindSegmenter(nn.Module):
         self.output_dim = output_dim
         self.model = model
 
-        self.decoder_head = CoreDecoder(embedding_dim=embed_dim,
-                                        output_dim=output_dim,
-                                        depths=decoder_depths,
-                                        dims=decoder_dims,
-                                        activation=decoder_activation,
-                                        padding=decoder_padding,
-                                        norm=decoder_norm)
-
-        self.decoder_downsample_block = nn.Identity()
-
-    def reshape(self, x):
-        # Separate channel axis
-        N, L, D = x.shape
-        x = x.permute(0, 2, 1)
-        x = x.reshape(N, D, int(L ** 0.5), int(L ** 0.5))
-        return x
-
     def forward(self, x):
-        x = self.model(x)
-
-        # Getting output after final layer only
-        x = x[-1]
-
-        # reshape into 2d features
-        x = self.reshape(x)
-        x = self.decoder_downsample_block(x)
-        y = self.decoder_head(x)
-        return y
+        return self.model(x)
 
 
 class TerraMindClassifier(nn.Module):
@@ -100,17 +75,25 @@ def terramind(output_dim=1, decoder_norm='batch', decoder_padding='same',
                                     output_dim=output_dim)
 
     else:
-        model = TerraMindSegmenter(model=model,
-                                   output_dim=output_dim,
-                                   decoder_norm=decoder_norm,
-                                   decoder_padding=decoder_padding,
-                                   decoder_activation=decoder_activation,
-                                   decoder_depths=decoder_depths,
-                                   decoder_dims=decoder_dims
-                                   )
+        model = EncoderDecoderFactory().build_model(
+            task="segmentation",
+            backbone="terramind_v1_base",
+            backbone_modalities=["S2L1C"],
+            decoder="UNetDecoder",
+            decoder_channels=[512, 256, 128, 64],
+            backbone_pretrained=True,
+            num_classes=4,
+            necks=[{
+                "name": "SelectIndices",
+                "indices": [2, 5, 8, 11]
+            },
+                {"name": "ReshapeTokensToImage",
+                 "remove_cls_token": False},
+                {"name": "LearnedInterpolateToPyramidal"}]
+        )
 
     if freeze_body:
-        for _, param in model.model.encoder.named_parameters():
+        for _, param in model.encoder.named_parameters():
             param.requires_grad = False
 
     model.float()
