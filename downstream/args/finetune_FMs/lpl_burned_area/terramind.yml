@@ -1,5 +1,5 @@
 
-experiment_name: phi2_terramind/burned_area_terratorch_decoder
+experiment_name: phi2_terramind/burned_area_pretrain_scaling
 downstream_task: burned_area
 model_name: terramind_segmenter
 augmentations: True

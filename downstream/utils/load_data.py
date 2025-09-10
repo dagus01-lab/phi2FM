@@ -4,7 +4,7 @@ import buteo as beo
 import numpy as np
 
 from typing import Tuple, Optional
-# from terratorch.models.backbones.terramind.model.terramind_register import v1_pretraining_mean, v1_pretraining_std
+from terratorch.models.backbones.terramind.model.terramind_register import v1_pretraining_mean, v1_pretraining_std
 
 from utils import config_lc
 from utils import Prithvi_100M_config
@@ -449,6 +449,14 @@ def minmax_normalize_image(x):
         if max_val > min_val:  # Avoid division by zero
             x[c] = (x[c] - min_val) / (max_val - min_val)
     return x
+
+def terramind_scaling(x):
+    mean = np.array(v1_pretraining_mean["untok_sen2l1c@224"]).reshape(-1, 1, 1) / 10000
+    std = np.array(v1_pretraining_std["untok_sen2l1c@224"]).reshape(-1, 1, 1) / 10000
+
+    x = (x - mean) / std
+
+    return x
     
 def normalize_image_burned_area(x):
     means = [0.5692603492540789, 0.5233146455770651, 0.49774728208504626, 0.5614061973077787, 0.5094977101466148, 0.5503450336828751, 0.5719299002762076, 0, 0, 0]
@@ -469,7 +477,8 @@ def callback_decoder_burned_area(x, y):
     x = beo.channel_last_to_first(x)
     if y.ndim > 2:
         y = beo.channel_last_to_first(y)
-    x = minmax_normalize_image(x) #normalize_image_burned_area(x)
+    # x = minmax_normalize_image(x) #normalize_image_burned_area(x)
+    x = terramind_scaling(x)
     return torch.from_numpy(x), torch.from_numpy(y)
 
 def callback_decoder_clouds(x, y):
