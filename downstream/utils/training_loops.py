@@ -549,7 +549,7 @@ class TrainBase():
             print(f"Test Loss: {self.test_metrics}")
             outputs = self.model(images)
             self.val_visualize(images.detach().cpu().numpy(), labels.detach().cpu().numpy(),
-                               outputs.detach().cpu().numpy(), name='test')
+                               outputs.output.detach().cpu().numpy(), name='test')
 
         if isinstance(self.model, nn.DataParallel):
             model_sd = self.model.module.state_dict().copy()

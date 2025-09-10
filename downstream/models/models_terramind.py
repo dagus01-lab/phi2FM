@@ -75,7 +75,7 @@ def terramind(output_dim=1, freeze_body=True, classifier=False):
     else:
         model = EncoderDecoderFactory().build_model(
             task="segmentation",
-            backbone="terramind_v1_base",
+            backbone="terramind_v1_tiny",
             backbone_modalities=["S2L1C"],
             decoder="UNetDecoder",
             decoder_channels=[512, 256, 128, 64],
