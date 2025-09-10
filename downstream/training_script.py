@@ -1002,11 +1002,7 @@ if __name__ == "__main__":
     wandb_run = None
     if args.wandb:
         wandb.login()
-        wandb_run = wandb.init(project="esa-phi-sat2", name=args.downstream_task, config={
-            "epochs": args.epochs,
-            "batch_size": args.batch_size,
-            "learning_rate": args.lr,
-        })
+        wandb_run = wandb.init(project="esa-phi-sat2", name=args.downstream_task, config=args)
 
     args.update({"wandb_run": wandb_run})
 
