@@ -596,8 +596,27 @@ def callback_decoder_prithvi_burned_area(x, y):
 def callback_preprocess_phisatnet_burned_area(x, y):
     return x, y
 
-def load_data(dataset_path, device, with_augmentations=False, num_workers=0, batch_size=16, downstream_task=None, model_name=None, pad_bands=False, 
-             crop_images: bool = False, n: int = None, regions: list= None, y: str='lc', data_selection: str = 'create', name: str = None, split_percentage: list=None, by_region: bool=False, num_classes: int = 4, weights_dir: str = None, patch_size: Optional[Tuple[int, int]] = None):
+def load_data(dataset_path,
+              device,
+              with_augmentations=False,
+              num_workers=0,
+              batch_size=16,
+              downstream_task=None,
+              model_name=None,
+              pad_bands=False,
+              crop_images: bool = False,
+              n: int = None,
+              regions: list= None,
+              y: str='lc',
+              data_selection: str = 'create',
+              name: str = None,
+              split_percentage: list=None,
+              by_region: bool=False,
+              num_classes: int = 4,
+              weights_dir: str = None,
+              patch_size: Optional[Tuple[int, int]] = None,
+              shrink_val_set: float=1.0
+              ):
 
     """
     Loads the data from the data folder.
@@ -778,11 +797,11 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             batch_size=batch_size,                           # Number of samples per batch
             shuffle=True,                            # Enable shuffling (useful for training)
             # TODO: Increase number of workers
-            num_workers=4,                           # Number of parallel workers for loading
+            num_workers=num_workers,                           # Number of parallel workers for loading
             #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
             metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
             verbose = False,
-            split = [.8, .2], 
+            split = [.8, .2],
             split_names = ["train", "validation"],
             callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val],
             callback_post_augmentation = [callback_post_augmentation_training, callback_post_augmentation_val],
@@ -794,7 +813,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             num_classes=num_classes, 
             n_shot=[n, 0], 
             weights_dir=weights_dir, 
-            patch_size=patch_size
+            patch_size=patch_size,
+            shrink_val_set=shrink_val_set,
         )
 
         _, _, dl_test = get_zarr_dataloader(

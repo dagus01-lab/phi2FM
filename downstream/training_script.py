@@ -514,15 +514,52 @@ def get_args():
     parser.add_argument('--pad_bands', type=int, default=10)
     parser.add_argument('--min_lr', type=float, default=1e-6)
     parser.add_argument('--wandb', type=bool, default=False)
+    parser.add_argument('--shrink_val_set', type=bool, default=False)
 
     return parser, parser_yaml
 
 
-def main(experiment_name, downstream_task, model_name, augmentations, batch_size, model_device, generator_device, num_workers, early_stop, 
-        epochs, input_channels, output_channels, input_size, lr, lr_scheduler, n_shot, split_ratio, regions, vis_val, warmup, warmp_steps, 
-        warmup_gamma, pretrained_model_path, freeze_pretrained, data_path_128_10m, data_path_224_10m, data_path_224_30m, data_path_inference_128, 
-        data_path_inference_224, train_mode, downstream_model_path, output_path, data_parallel, 
-        device_ids, only_get_datasets, pad_bands, min_lr, patch_size, wandb, wandb_run):
+def main(experiment_name,
+         downstream_task,
+         model_name,
+         augmentations,
+         batch_size,
+         model_device,
+         generator_device,
+         num_workers,
+         early_stop,
+         epochs,
+         input_channels,
+         output_channels,
+         input_size,
+         lr,
+         lr_scheduler,
+         n_shot,
+         split_ratio,
+         regions,
+         vis_val,
+         warmup,
+         warmp_steps,
+         warmup_gamma,
+         pretrained_model_path,
+         freeze_pretrained,
+         data_path_128_10m,
+         data_path_224_10m,
+         data_path_224_30m,
+         data_path_inference_128,
+         data_path_inference_224,
+         train_mode,
+         downstream_model_path,
+         output_path,
+         data_parallel,
+         device_ids,
+         only_get_datasets,
+         pad_bands,
+         min_lr,
+         patch_size,
+         wandb,
+         wandb_run,
+         shrink_val_set):
     """ 
     main script for PhilEO Bench. Used to run model training experiments with randomly initialized and pre-trained models on a number of downstream tasks. 
     The script handles dataset creation (based on data protocol options selected), data preprocessing (based on downstream task & model type) & model, training, validation and testing. 
@@ -769,7 +806,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # Create dataloaders
     print(f'Batch size: {batch_size}')
     patch_size = (args.patch_size, args.patch_size)
-    weights, pos_weight, dl_train, dl_test, dl_val, dl_inference= load_data.load_data(
+    weights, pos_weight, dl_train, dl_val, dl_test, dl_inference = load_data.load_data(
         dataset_folder,
         with_augmentations=augmentations,
         num_workers=num_workers,
@@ -783,6 +820,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         n=n_shot, 
         weights_dir=downstream_task,
         patch_size=patch_size,
+        shrink_val_set=shrink_val_set,
     )
 
     # Log dataloader sizes and training model

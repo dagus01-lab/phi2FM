@@ -1,12 +1,12 @@
 
-experiment_name: phi2_terramind/burned_area
+experiment_name: phi2_terramind/burned_area_small_val_check
 downstream_task: burned_area
 model_name: terramind_segmenter
 augmentations: True
 batch_size: 2
 model_device: mps
 generator_device: mps
-num_workers: 16
+num_workers: 4
 early_stop: 15
 epochs: 200
 input_channels: 13
@@ -37,4 +37,5 @@ data_parallel: False
 device_ids: [0]
 pad_bands: 13 # 10 for all models, None for phisatnet, 13 for moco and dino
 only_get_datasets: False
-wandb: True
+wandb: False
+shrink_val_set: 0.2

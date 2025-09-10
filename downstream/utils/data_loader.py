@@ -602,7 +602,7 @@ class PhiSatDataset(Dataset):
         pos_weights = torch.from_numpy((neg / pos).astype(np.float32))
         return class_weights, pos_weights
 
-    def split_by_percentages(self, split: List[float], split_names: List[str]) -> List['PhiSatDataset']:
+    def split_by_percentages(self, split: List[float], split_names: List[str], shrink_val_set: float) -> List['PhiSatDataset']:
         """
         Splits the dataset into subsets according to specified percentages, 
         while maintaining class distribution as best as possible.
@@ -627,6 +627,14 @@ class PhiSatDataset(Dataset):
 
         if len(predefined) == len(split_names):
             # We have all splits predefined, so we use them
+            if shrink_val_set is not None:
+                assert 0. < shrink_val_set <= 1.0, "Validation can be reduced by [0%, 99%], not more or less."
+                k = max(1, int(len(predefined["validation"]) * shrink_val_set))
+                validation_shrunk = random.sample(predefined["validation"], k)
+                print(f"Original size: {len(predefined["validation"])}, New size: {len(validation_shrunk)}")
+
+                predefined["validation"] = validation_shrunk
+
             subsets = [predefined[name] for name in split_names]
         else:
             # Fallback: generate splits randomly, stratified by class
@@ -825,7 +833,8 @@ def get_zarr_dataloader(
     n_regions: int = 6, 
     save:bool = False, 
     split_names: List[str] = None, 
-    patch_size: Tuple[int, int] = None
+    patch_size: Tuple[int, int] = None,
+    shrink_val_set: float = 1.0,
     
 ) -> DataLoader:
     """
@@ -876,7 +885,7 @@ def get_zarr_dataloader(
     print(f"weights: {weights}, pos_weights:{pos_weights}")
 
     if not split is None:
-        sub_datasets = dataset.split_by_percentages(split=split, split_names = split_names)
+        sub_datasets = dataset.split_by_percentages(split=split, split_names = split_names, shrink_val_set=shrink_val_set)
         dataloaders = []
         for idx, sub_dataset in enumerate(sub_datasets):
 
