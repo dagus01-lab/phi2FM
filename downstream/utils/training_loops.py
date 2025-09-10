@@ -7,6 +7,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
 
 # PyTorch
 from tqdm import tqdm
@@ -194,17 +195,34 @@ class TrainBase():
 
     def set_scheduler(self):
         if self.lr_scheduler == 'cosine_annealing':
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            # Warmup scheduler: linearly increase LR from 0 to base LR
+            warmup_scheduler = LinearLR(
                 self.optimizer,
-                20,
-                2,
-                eta_min=0.000001,
-                last_epoch=self.epochs - 1,
+                start_factor=0.0001,
+                end_factor=1.0,
+                total_iters=self.warmup_steps,
             )
+
+            # Cosine annealing scheduler: starts after warmup
+            cosine_scheduler = CosineAnnealingLR(
+                self.optimizer,
+                T_max=self.epochs - self.warmup_steps,
+                eta_min=1e-6,
+            )
+
+            # Combine both schedulers
+            scheduler = SequentialLR(
+                self.optimizer,
+                schedulers=[warmup_scheduler, cosine_scheduler],
+                milestones=[self.warmup_steps],
+            )
+
         elif self.lr_scheduler == 'reduce_on_plateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', factor=0.1, patience=6, min_lr=1e-6)
+
         else:
             scheduler = None
+
         return scheduler
 
     def get_loss(self, images, labels):

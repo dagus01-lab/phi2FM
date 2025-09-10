@@ -509,7 +509,7 @@ def get_args():
     parser.add_argument('--C', type=str, default='/home/phimultigpu/phileo_NFS/phileo_data/experiments')
     parser.add_argument('--data_parallel', type=str, default=None)
     parser.add_argument('--device_ids', type=list, default=[0, 1, 2, 3])
-    parser.add_argument('--warmp_steps', type=int, default=5)
+    parser.add_argument('--warmup_steps', type=int, default=5)
     parser.add_argument('--warmup_gamma', type=int, default=10)
     parser.add_argument('--pad_bands', type=int, default=10)
     parser.add_argument('--min_lr', type=float, default=1e-6)
@@ -539,7 +539,7 @@ def main(experiment_name,
          regions,
          vis_val,
          warmup,
-         warmp_steps,
+         warmup_steps,
          warmup_gamma,
          pretrained_model_path,
          freeze_pretrained,
@@ -589,7 +589,7 @@ def main(experiment_name,
                                  'tanzania-1', 'tanzania-2', 'tanzania-3', 'tanzania-4', 'tanzania-5', 'uganda-1'] Defaults to None.
         vis_val (bool, optional): If set to True data visulisations will be generated at each validation step. Defaults to True.
         warmup (bool, optional): If set to True a linear optimizer warmup phase will occour. Defaults to False.
-        warmp_steps (int, optional): Define number of steps for linear warmup phase. Defaults to 5.
+        warmup_steps (int, optional): Define number of steps for linear warmup phase. Defaults to 5.
         warmup_gamma (int, optional): Define learning rate increase per step in linear warmup phase - new_lr = lr*gamma. Defaults to 10. N.B. initial lr is calulated as follows init_lr = lr/(gamma**warmup_steps)
         pretrained_model_path (str, optional): For pretrained models define the model weights path. Defaults to None.
         freeze_pretrained (bool, optional): If True pretrained encoder weights will be frozen during training. Defaults to None.
@@ -845,7 +845,7 @@ def main(experiment_name,
     init_lr = lr
     assert (min_lr is None) != (warmup_gamma is None), 'min_lr and warmup_gamma cannot be used together'
     if warmup and warmup_gamma is not None:
-        lr = lr / int(( 10 )**(warmp_steps))  # for warmup start
+        lr = lr / int(( 10 )**(warmup_steps))  # for warmup start
 
 
     trainer = get_trainer(
@@ -865,7 +865,7 @@ def main(experiment_name,
         NAME=NAME,
         OUTPUT_FOLDER=OUTPUT_FOLDER,
         vis_val=vis_val,
-        warmup_steps=warmp_steps,
+        warmup_steps=warmup_steps,
         warmup_gamma=warmup_gamma,
         pos_weight=pos_weight,
         weights=weights,
