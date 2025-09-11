@@ -1003,7 +1003,7 @@ if __name__ == "__main__":
     wandb_run = None
     if args.wandb:
         wandb.login()
-        wandb_run = wandb.init(project="esa-phi-sat2", name=args.downstream_task, config=args)
+        wandb_run = wandb.init(project="esa-phi-sat2", name=args.experiment_name, config=args)
 
     args.update({"wandb_run": wandb_run})
 
