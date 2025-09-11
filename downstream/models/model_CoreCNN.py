@@ -34,6 +34,8 @@ class CoreCNNBlock(nn.Module):
 
 
     def forward(self, x):
+        x = x.contiguous()
+
         identity = x
         x = self.activation(self.norm1(self.conv1(x)))
         x = self.activation(self.norm2(self.conv2(x)))

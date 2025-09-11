@@ -1,28 +1,19 @@
 import os
 import yaml
-
 import torch
-# torch.autograd.detect_anomaly(check_nan=True)
+import argparse
+import wandb
+import inspect
+import numpy as np
+import torch.nn as nn
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 from torchinfo import summary
 from fvcore.nn import FlopCountAnalysis
-
-import numpy as np
-import random
-import inspect
 from collections import OrderedDict
-
-
-import torch.nn as nn
 from datetime import date
-import argparse
-
 from torch.nn.parallel import DistributedDataParallel as DDP
-
-
-
-import warnings
-warnings.filterwarnings("ignore", category=FutureWarning)
 
 from models.model_Baseline import BaselineNet
 from models.model_CoreCNN_versions import CoreUnet_nano, CoreUnet_tiny, CoreUnet_base, CoreUnet_large, CoreUnet_huge, Core_nano, CoreUnetGeolocation_nano
@@ -37,6 +28,7 @@ from models.model_AutoEncoderViTPretrained_classifier import vit_cnn_classifier,
 from models.model_CoreVAE import CoreVAE_nano
 from models.model_SatMAE import satmae_vit_cnn
 from models.models_Prithvi import prithvi
+from models.models_terramind import terramind
 from models.model_Seco import seasonal_contrast
 from models.model_Resnet50 import resnet
 from models.code_phileo_precursor.model_foundation_local_rev2 import PhileoPrecursor, PhileoPrecursorClassifier
@@ -46,12 +38,10 @@ from models.model_dino_ssl4eo12 import dino_resnet
 from pretrain.models.utils_fm import get_phisat2_model
 from downstream.models.phisatnet_downstream import PhiSatNetDownstream
 
-
-from utils import data_protocol
 from utils import load_data
 from utils import training_loops
 from utils.training_utils import read_yaml
-from utils.utils import module_memory_usage, dataloader_to_arrays, dataloader_to_tensors, convert_to_onnx, ddp_setup, ddp_cleanup
+from utils.utils import module_memory_usage, ddp_setup, ddp_cleanup
 
 torch.manual_seed(123456)
 CNN_LIST = ['baseline_cnn', 'core_unet_nano','core_unet_tiny','core_unet_base', 'core_unet_large', 'core_unet_huge',
@@ -76,122 +66,126 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        ]
 
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
-                           'vit_cnn_classifier', 'prithvi_classifier', 'vit_cnn_wSkip', 'vit_cnn_gc_wSkip']
+                           'vit_cnn_classifier', 'prithvi_classifier', 'vit_cnn_wSkip', 'vit_cnn_gc_wSkip',
+                           "terramind_classifier", "terramind_segmenter"]
 
 MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier', 
-              'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier', 'caco', 'caco_classifier']
+              'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier', 'caco', 'caco_classifier',
+              # "terramind_classifier", "terramind_segmenter"
+              ]
+
 MODELS_224_r30 = ['prithvi', 'prithvi_classifier']
 
 MODEL_LIST = CNN_LIST + MIXER_LIST + VIT_LIST + CNN_PRETRAINED_LIST + VIT_CNN_LIST + VIT_CNN_PRETRAINED_LIST
 DOWNSTREAM_LIST = ['lc', 'building', 'roads', 'lc_classification', 'building_classification', 'roads_classification', 'fire', 'burned_area', 'worldfloods', 'clouds']
 
 
-def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_scheduler, warmup, early_stop, dl_train,
+def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_scheduler, early_stop, dl_train,
                 dl_val, dl_test, dl_inference, NAME, OUTPUT_FOLDER, vis_val, warmup_steps, warmup_gamma, pos_weight, 
-                weights, save_info_vars, rank=None, min_lr=None):
+                weights, save_info_vars, wandb_run, rank=None, min_lr=None):
     
     if model_name in (CNN_LIST + MIXER_LIST + VIT_CNN_LIST + CNN_PRETRAINED_LIST + VIT_CNN_PRETRAINED_LIST):
         if downstream_task == 'roads' or downstream_task == 'building':
             trainer = training_loops.TrainBase(epochs=epochs, lr=lr, model=model, device=device,
-                                               lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                               lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                train_loader=dl_train,
                                                val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                               warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars)
+                                               warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars, wandb_run=wandb_run)
         elif downstream_task == 'coords':
             trainer = training_loops.TrainGeoLocate(epochs=epochs, lr=lr, model=model, device=device,
-                                                    lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                    lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                     train_loader=dl_train,
                                                     val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                     out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                                    warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars)
+                                                    warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars, wandb_run=wandb_run)
             
         elif downstream_task == 'lc':
             trainer = training_loops.TrainLandCover(epochs=epochs, lr=lr, model=model, device=device,
-                                                    lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                    lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                     train_loader=dl_train,
                                                     val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                     out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                                    warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars)
+                                                    warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, save_info_vars=save_info_vars, wandb_run=wandb_run)
         elif downstream_task == 'building_classification':
             trainer = training_loops.TrainClassificationBuildings(epochs=epochs, lr=lr, model=model, device=device,
-                                                                  lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                                  lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                                   train_loader=dl_train,
                                                                   val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                                   out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                                   warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, weights=weights,
-                                                                  save_info_vars=save_info_vars)
+                                                                  save_info_vars=save_info_vars, wandb_run=wandb_run)
 
         elif downstream_task == 'lc_classification':
             trainer = training_loops.TrainClassificationLC(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, pos_weight=pos_weight,
-                                                           save_info_vars=save_info_vars)
+                                                           save_info_vars=save_info_vars, wandb_run=wandb_run)
 
         elif downstream_task == 'roads_classification':
             trainer = training_loops.TrainClassificationRoads(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars)
+                                                           save_info_vars=save_info_vars, wandb_run=wandb_run)
         elif downstream_task == 'fire':
             print(f"yes: {model_name}")
             trainer = training_loops.TrainClassificationFire(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'burned_area':
             trainer = training_loops.TrainSegmentationBurned(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'clouds':
             trainer = training_loops.TrainCloudSegmentation(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train, num_classes=5,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight)
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'worldfloods':
             trainer = training_loops.TrainSegmentationWorldfloods(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
-                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, num_classes=3)
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, num_classes=3, wandb_run=wandb_run)
 
     elif model_name in (VIT_LIST):
         if downstream_task == 'roads' or downstream_task == 'building' or downstream_task=='burned_area':
             trainer = training_loops.TrainViT(epochs=epochs, lr=lr, model=model, device=device,
-                                              lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop, train_loader=dl_train,
+                                              lr_scheduler=lr_scheduler, early_stop=early_stop, train_loader=dl_train,
                                               val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                               out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                              warmup_steps=warmup_steps, warmup_gamma=warmup_gamma)
+                                              warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, wandb_run=wandb_run)
 
         elif downstream_task == 'lc':
             trainer = training_loops.TrainViTLandCover(epochs=epochs, lr=lr, model=model, device=device,
-                                                       lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                       lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                        train_loader=dl_train,
                                                        val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                        out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
-                                                       warmup_steps=warmup_steps, warmup_gamma=warmup_gamma)
+                                                       warmup_steps=warmup_steps, warmup_gamma=warmup_gamma, wandb_run=wandb_run)
 
     if model_name == 'core_vae_nano':
         trainer = training_loops.TrainVAE(epochs=epochs, lr=lr, model=model, device=device,
-                                          lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                          lr_scheduler=lr_scheduler, early_stop=early_stop,
                                           train_loader=dl_train,
                                           val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                           out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
@@ -388,6 +382,10 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         prithvi_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
         return prithvi(checkpoint=sd, freeze_body=freeze, classifier=True, **prithvi_kwargs)
 
+    elif "terramind" in model_name:
+        classify = False if "classifier" not in model_name else True
+        return terramind(output_dim=output_channels, freeze_body=freeze, classifier=classify)
+
     elif model_name == 'vit_cnn':
         sd = torch.load(path_model_weights, map_location=device)
         vit_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
@@ -476,7 +474,6 @@ def get_args():
     parser.add_argument('--early_stop', type=int, default=50, help='set training loop patience for early stopping')
     parser.add_argument('--lr_scheduler', type=str, default=None,
                         choices=[None, 'reduce_on_plateau', 'cosine_annealing'], help='select learning rate scheduler')
-    parser.add_argument('--warmup', action="store_true", help='Enables linear 5 epoch warmup scheduler')
     parser.add_argument('--model_device', default=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
                         help='select training device')
     parser.add_argument('--generator_device', default=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
@@ -487,6 +484,7 @@ def get_args():
                         help='select downstream task')
     parser.add_argument('--input_channels', type=int, required=False, default=10, help='Define Number of input channels')
     parser.add_argument('--input_size', type=int, required=True, default=128, help='Define input size')
+    parser.add_argument('--patch_size', type=int, required=False, default=16, help='Define input size')
     parser.add_argument('--output_channels', type=int, required=True, default=1, help='Define Number of output channels')
 
     parser.add_argument('--regions', type=list, default=None, help='select regions to be included',
@@ -510,23 +508,56 @@ def get_args():
     parser.add_argument('--C', type=str, default='/home/phimultigpu/phileo_NFS/phileo_data/experiments')
     parser.add_argument('--data_parallel', type=str, default=None)
     parser.add_argument('--device_ids', type=list, default=[0, 1, 2, 3])
-    parser.add_argument('--warmp_steps', type=int, default=5)
+    parser.add_argument('--warmup_steps', type=int, default=5)
     parser.add_argument('--warmup_gamma', type=int, default=10)
     parser.add_argument('--pad_bands', type=int, default=10)
     parser.add_argument('--min_lr', type=float, default=1e-6)
-
-
+    parser.add_argument('--wandb', type=bool, default=False)
+    parser.add_argument('--shrink_val_set', type=bool, default=False)
 
     return parser, parser_yaml
 
 
-
-
-def main(experiment_name, downstream_task, model_name, augmentations, batch_size, model_device, generator_device, num_workers, early_stop, 
-        epochs, input_channels, output_channels, input_size, lr, lr_scheduler, n_shot, split_ratio, regions, vis_val, warmup, warmp_steps, 
-        warmup_gamma, pretrained_model_path, freeze_pretrained, data_path_128_10m, data_path_224_10m, data_path_224_30m, data_path_inference_128, 
-        data_path_inference_224, train_mode, downstream_model_path, output_path, data_parallel, 
-        device_ids, only_get_datasets, pad_bands, min_lr):
+def main(experiment_name,
+         downstream_task,
+         model_name,
+         augmentations,
+         batch_size,
+         model_device,
+         generator_device,
+         num_workers,
+         early_stop,
+         epochs,
+         input_channels,
+         output_channels,
+         input_size,
+         lr,
+         lr_scheduler,
+         n_shot,
+         split_ratio,
+         regions,
+         vis_val,
+         warmup_steps,
+         warmup_gamma,
+         pretrained_model_path,
+         freeze_pretrained,
+         data_path_128_10m,
+         data_path_224_10m,
+         data_path_224_30m,
+         data_path_inference_128,
+         data_path_inference_224,
+         train_mode,
+         downstream_model_path,
+         output_path,
+         data_parallel,
+         device_ids,
+         only_get_datasets,
+         pad_bands,
+         min_lr,
+         patch_size,
+         wandb,
+         wandb_run,
+         shrink_val_set):
     """ 
     main script for PhilEO Bench. Used to run model training experiments with randomly initialized and pre-trained models on a number of downstream tasks. 
     The script handles dataset creation (based on data protocol options selected), data preprocessing (based on downstream task & model type) & model, training, validation and testing. 
@@ -556,7 +587,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
                                  'tanzania-1', 'tanzania-2', 'tanzania-3', 'tanzania-4', 'tanzania-5', 'uganda-1'] Defaults to None.
         vis_val (bool, optional): If set to True data visulisations will be generated at each validation step. Defaults to True.
         warmup (bool, optional): If set to True a linear optimizer warmup phase will occour. Defaults to False.
-        warmp_steps (int, optional): Define number of steps for linear warmup phase. Defaults to 5.
+        warmup_steps (int, optional): Define number of steps for linear warmup phase. Defaults to 5.
         warmup_gamma (int, optional): Define learning rate increase per step in linear warmup phase - new_lr = lr*gamma. Defaults to 10. N.B. initial lr is calulated as follows init_lr = lr/(gamma**warmup_steps)
         pretrained_model_path (str, optional): For pretrained models define the model weights path. Defaults to None.
         freeze_pretrained (bool, optional): If True pretrained encoder weights will be frozen during training. Defaults to None.
@@ -665,11 +696,13 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             'seasonal_contrast': (batch_size, input_channels, 224, 224),
             'resnet_imagenet': (batch_size, input_channels, 224, 224),
             'resnet': (batch_size, input_channels, 224, 224),
-            'seasonal_contrast_classifier': (batch_size, input_channels, 224, 224)
+            'seasonal_contrast_classifier': (batch_size, input_channels, 224, 224),
+            'terramind': (batch_size, input_channels, 224, 224)
         }
 
         input_size_total = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
-        model_summary = summary(model, input_size=input_size_total, dtypes=[torch.float32])
+        # model_summary = summary(model, input_size=input_size_total, dtypes=[torch.float32])
+        model_summary = None
 
         if model_device == 'cpu':
             model.to(model_device)
@@ -764,45 +797,15 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         if n_shot == 0:
             n_shot = 1
             train_mode = 'inference'
-        #x_train, y_train, x_val, y_val, pos_weight, weights = data_protocol.protocol_fewshot_memmapped(
-        #    folder=dataset_folder,
-        #    dst=None,
-        #    n=n_shot,
-        #    regions=regions,
-        #    y=downstream_task,
-        #    data_selection='create',
-        #    name=dataset_name,
-        #    crop_images=crop_images
-        #)
         additional_params = {'n':n_shot, 'regions':regions, 'y':downstream_task, 'data_selection':'create', 'name':dataset_name,'crop_images':crop_images}
 
     elif isinstance(split_ratio, float):
-        #x_train, y_train, x_val, y_val = data_protocol.protocol_split(
-        #    dataset_folder,
-        #    split_percentage=split_ratio,
-        #    regions=regions,
-        #    y=downstream_task,
-        #    by_region=by_region
-        #)
         additional_params = {'split_percentage':split_ratio, 'regions':regions, 'y':downstream_task,'by_region':by_region}
-
-    # Prepare testset and inference set
-    #x_test, y_test = data_protocol.get_testset(
-    #    folder=dataset_folder,
-    #    y=downstream_task,
-    #    crop_images=crop_images,
-    #    by_region=by_region,
-    #)
-    #x_inference, y_inference = data_protocol.get_testset(
-    #    folder=data_path_inference,
-    #    y=downstream_task,
-    #    crop_images=crop_images,
-    #    by_region=by_region
-    #)
 
     # Create dataloaders
     print(f'Batch size: {batch_size}')
-    weights, pos_weight, dl_train, dl_test, dl_val, dl_inference= load_data.load_data(
+    patch_size = (args.patch_size, args.patch_size)
+    weights, pos_weight, dl_train, dl_val, dl_test, dl_inference = load_data.load_data(
         dataset_folder,
         with_augmentations=augmentations,
         num_workers=num_workers,
@@ -814,34 +817,11 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         crop_images=crop_images, 
         num_classes=output_channels, 
         n=n_shot, 
-        weights_dir=downstream_task
+        weights_dir=downstream_task,
+        patch_size=patch_size,
+        shrink_val_set=shrink_val_set,
     )
-    #print(f"Weight: {weights}, position weight:{pos_weight}")
-        
-    # Log shapes of first elements in each dataset
-    if False:#world_rank == 0:
-        print("Dataset protocol:", dataset_name)
-        if len(dl_train) > 0:
-            x, y = next(iter(dl_train))[0] 
-            print("Training set datapoint shape: X -", x.shape)
-        else:
-            print("Training dataset is empty.")
-        if len(dl_var) > 0:
-            x, y = next(iter(dl_val))[0]
-            print("Validation set datapoint shape: X -", x.shape)
-        else:
-            print("Validation dataset is empty.")
-        if len(dl_test) > 0:
-            x, y = next(iter(dl_test))[0]
-            print("Test set datapoint shape: X -", x.shape)
-        else:
-            print("Test dataset is empty.")
-        if len(dl_inference) > 0:
-            x, y = next(iter(dl_inference))[0]
-            print("Inference set datapoint shape: X -", x.shape)
-        else:
-            print("Inference dataset is empty.")
-    
+
     # Log dataloader sizes and training model
     if world_rank == 0:
         print(f"Length of training dataloader: {len(dl_train)}")
@@ -863,8 +843,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # Get learning rate
     init_lr = lr
     assert (min_lr is None) != (warmup_gamma is None), 'min_lr and warmup_gamma cannot be used together'
-    if warmup and warmup_gamma is not None:
-        lr = lr / int(( 10 )**(warmp_steps))  # for warmup start
 
 
     trainer = get_trainer(
@@ -875,7 +853,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         model=model,
         device=model_device,
         lr_scheduler=lr_scheduler,
-        warmup=warmup,
         early_stop=early_stop,
         dl_train=dl_train,
         dl_val=dl_val,
@@ -884,13 +861,14 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         NAME=NAME,
         OUTPUT_FOLDER=OUTPUT_FOLDER,
         vis_val=vis_val,
-        warmup_steps=warmp_steps,
+        warmup_steps=warmup_steps,
         warmup_gamma=warmup_gamma,
         pos_weight=pos_weight,
         weights=weights,
-        save_info_vars=(model_summary, n_shot, split_ratio, warmup, init_lr),
+        save_info_vars=(model_summary, n_shot, split_ratio, init_lr),
         rank=world_rank,
-        min_lr=min_lr
+        min_lr=min_lr,
+        wandb_run=wandb_run
     )
 
 
@@ -899,7 +877,7 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
     # -----------------------------------------------------------------------
 
     # import pdb; pdb.set_trace()
-    
+
     if train_mode == 'train_test_inference':
         trainer.train()
         trainer.test()
@@ -907,7 +885,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             model_summary=model_summary,
             n_shot=n_shot,
             p_split=split_ratio,
-            warmup=warmup,
             lr=init_lr
         )
         trainer.inference()
@@ -920,7 +897,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
             model_summary=model_summary,
             n_shot=n_shot,
             p_split=split_ratio,
-            warmup=warmup,
             lr=init_lr
         )
 
@@ -963,7 +939,6 @@ def main(experiment_name, downstream_task, model_name, augmentations, batch_size
         print(f"See results of experiment in {OUTPUT_FOLDER}")
 
 
-
 def override_paths_with_env(args_dict):
     downstream_task = args_dict.get('downstream_task', '').upper()
 
@@ -998,12 +973,12 @@ def override_paths_with_env(args_dict):
         args_dict["pretrained_model_path"] = new_path
 
     return args_dict
+
+
 if __name__ == "__main__":
     
     print('Starting training_script.py')
-
-    pid = os.getpid()
-    print(f"Script started with PID: {pid}")
+    print(f"Script started with PID: {os.getpid()}")
 
     # 1. Reading YAML file
     parser, parser_yaml = get_args()
@@ -1017,16 +992,21 @@ if __name__ == "__main__":
         args = parser.parse_args()
 
     # 2. Run main function
-    
+
     # RUN WITH MULTIPLE N-SHOT AND TASKS
-    # n_shot_list = [5000]
     if isinstance(args.n_shot, list):
         n_shot_list = args.n_shot
     elif isinstance(args.n_shot, int):
         n_shot_list = [args.n_shot]
-    #n_shot_list = [50, 100, 500, 1000, 5000]
-    base_exp_name =  args.experiment_name
-    #n_shot_list = [10, 20, 100, 200, 500]
+    base_exp_name = args.experiment_name
+
+    wandb_run = None
+    if args.wandb:
+        wandb.login()
+        wandb_run = wandb.init(project="esa-phi-sat2", name=args.experiment_name, config=args)
+
+    args.update({"wandb_run": wandb_run})
+
     for n_shot in n_shot_list:
         args.n_shot = n_shot
         for freeze_pretrained in [True, False]:
@@ -1037,21 +1017,11 @@ if __name__ == "__main__":
             else:
                 prefix="lp/"
             args.experiment_name = prefix+ base_exp_name
-            # if n_shot == 0 and not freeze_pretrained:
-            #     continue
-        #for downstream_task in ['roads']:
-        # for downstream_task in ['lc', 'lc_classification', 'building', 'roads']:
-        #    args.downstream_task = downstream_task
-        #    args.output_channels = 1 if 'building' in args.downstream_task or 'roads' in args.downstream_task else 11
-        #    args.model_name = args.model_name + '_classifier' if 'classification' in args.downstream_task else args.model_name
 
             print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")
             main(**vars(args))
-                
-            #args.model_name = args.model_name.replace('_classifier', '')
 
     else:
-        # JUST RUN WITH YAML ARGS
         main(**vars(args))
 
     print('Finished')

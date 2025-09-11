@@ -1,28 +1,14 @@
-
-# Standard Library
-import os
-from glob import glob
-import lmdb
-import pickle
-
 # External Libraries
+import torch
 import buteo as beo
 import numpy as np
 
-# PyTorch
-import torch
-from torch.utils.data import Dataset, DataLoader, Subset, random_split
-from torch.utils.data.distributed import DistributedSampler
+from typing import Tuple, Optional
+from terratorch.models.backbones.terramind.model.terramind_register import v1_pretraining_mean, v1_pretraining_std
 
 from utils import config_lc
 from utils import Prithvi_100M_config
 from utils.data_loader import get_zarr_dataloader, AugmentationRotationXY, AugmentationMirrorXY, AugmentationNoiseNormal
-
-import random
-from torchvision import transforms
-import math
-import torch.nn.functional as F
-from typing import Tuple, Optional
 
 
 # statistics used to normalize images before passing to the model
@@ -123,6 +109,8 @@ def to_one_hot_building(y):
 
 
 def pad_bands(x):
+    PROCESS_PHISAT = 13
+
     if x.shape[2] == 8:
         if PROCESS_PHISAT == 10:
             x = np.delete(x, 3, axis=2)
@@ -461,6 +449,14 @@ def minmax_normalize_image(x):
         if max_val > min_val:  # Avoid division by zero
             x[c] = (x[c] - min_val) / (max_val - min_val)
     return x
+
+def terramind_scaling(x):
+    mean = np.array(v1_pretraining_mean["untok_sen2l1c@224"]).reshape(-1, 1, 1) / 10000
+    std = np.array(v1_pretraining_std["untok_sen2l1c@224"]).reshape(-1, 1, 1) / 10000
+
+    x = (x - mean) / std
+
+    return x
     
 def normalize_image_burned_area(x):
     means = [0.5692603492540789, 0.5233146455770651, 0.49774728208504626, 0.5614061973077787, 0.5094977101466148, 0.5503450336828751, 0.5719299002762076, 0, 0, 0]
@@ -481,7 +477,8 @@ def callback_decoder_burned_area(x, y):
     x = beo.channel_last_to_first(x)
     if y.ndim > 2:
         y = beo.channel_last_to_first(y)
-    x = minmax_normalize_image(x) #normalize_image_burned_area(x)
+    # x = minmax_normalize_image(x) #normalize_image_burned_area(x)
+    x = terramind_scaling(x)
     return torch.from_numpy(x), torch.from_numpy(y)
 
 def callback_decoder_clouds(x, y):
@@ -608,13 +605,37 @@ def callback_decoder_prithvi_burned_area(x, y):
 def callback_preprocess_phisatnet_burned_area(x, y):
     return x, y
 
-def load_data(dataset_path, device, with_augmentations=False, num_workers=0, batch_size=16, downstream_task=None, model_name=None, pad_bands=False, 
-             crop_images: bool = False, n: int = None, regions: list= None, y: str='lc', data_selection: str = 'create', name: str = None, split_percentage: list=None, by_region: bool=False, num_classes: int = 4, weights_dir: str = None, patch_size: Optional[Tuple[int, int]] = None):
+def load_data(dataset_path,
+              device,
+              with_augmentations=False,
+              num_workers=0,
+              batch_size=16,
+              downstream_task=None,
+              model_name=None,
+              pad_bands=False,
+              crop_images: bool = False,
+              n: int = None,
+              regions: list= None,
+              y: str='lc',
+              data_selection: str = 'create',
+              name: str = None,
+              split_percentage: list=None,
+              by_region: bool=False,
+              num_classes: int = 4,
+              weights_dir: str = None,
+              patch_size: Optional[Tuple[int, int]] = None,
+              shrink_val_set: float=1.0
+              ):
 
     """
     Loads the data from the data folder.
     """
+
+    print("pad_bands", pad_bands)
+
     global PROCESS_PHISAT
+    # TODO: In the following methods, PROCESS_PHISAT is required to be an int, not a bool? Also, it's not found:
+    #  NameError: name 'PROCESS_PHISAT' is not defined
     PROCESS_PHISAT = pad_bands
     
     
@@ -715,8 +736,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
         if downstream_task in ['geo', 'lc_classification', 'building_classification', 'roads_regression', 'coords', ]:
             cb_postprocess = callback_postprocess_decoder_geo
             aug = [
-                AugmentationRotation(p=0, inplace=True),
-                AugmentationMirror(p=0.2, inplace=True),
+                AugmentationRotationXY(p=0, inplace=True),
+                AugmentationMirrorXY(p=0.2, inplace=True),
                 # beo.AugmentationCutmix(p=0.2, inplace=True),
                 AugmentationNoiseNormal(p=0.2, inplace=True),
             ]
@@ -742,6 +763,9 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
     callback_pre_augmentation_inference = None
     callback_post_augmentation_inference = cb_decoder
     augmentations_inference = None
+
+    # TODO: Why was the below line hard-coded to None? Shouldn't this correspond to input_size in the config?
+    #  Otherwise, we would have always loaded full tiles, no?
     patch_size = None
     if downstream_task == "clouds" or downstream_task == "worldfloods":
         patch_size = (256, 256)
@@ -750,7 +774,7 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
         weight, pos_weight, dl_train, dl_val, dl_test = get_zarr_dataloader(
             zarr_path=dataset_path,                     # Path to the Zarr archive
             dataset_set="trainval",                 # Dataset subset to use
-            batch_size=16,                           # Number of samples per batch
+            batch_size=batch_size,                           # Number of samples per batch
             shuffle=True,                            # Enable shuffling (useful for training)
             num_workers=4,                           # Number of parallel workers for loading
             #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
@@ -779,13 +803,14 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
         weight, pos_weight, dl_train, dl_val = get_zarr_dataloader(
             zarr_path=dataset_path,                     # Path to the Zarr archive
             dataset_set="trainval",                 # Dataset subset to use
-            batch_size=16,                           # Number of samples per batch
+            batch_size=batch_size,                           # Number of samples per batch
             shuffle=True,                            # Enable shuffling (useful for training)
-            num_workers=4,                           # Number of parallel workers for loading
+            # TODO: Increase number of workers
+            num_workers=num_workers,                           # Number of parallel workers for loading
             #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
             metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
             verbose = False,
-            split = [.8, .2], 
+            split = [.8, .2],
             split_names = ["train", "validation"],
             callback_pre_augmentation = [callback_pre_augmentation_training, callback_pre_augmentation_val],
             callback_post_augmentation = [callback_post_augmentation_training, callback_post_augmentation_val],
@@ -797,7 +822,8 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             num_classes=num_classes, 
             n_shot=[n, 0], 
             weights_dir=weights_dir, 
-            patch_size=patch_size
+            patch_size=patch_size,
+            shrink_val_set=shrink_val_set,
         )
 
         _, _, dl_test = get_zarr_dataloader(
@@ -809,23 +835,23 @@ def load_data(dataset_path, device, with_augmentations=False, num_workers=0, bat
             #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
             metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
             verbose = False,
-            split = None, 
+            split = None,
             split_names = ["test"],
             callback_pre_augmentation = callback_pre_augmentation_test,
             callback_post_augmentation = callback_post_augmentation_test,
             augmentations = augmentations_test,
-            crop_images= crop_images, 
-            generator= torch.Generator(device), 
-            pin_memory=True, 
-            drop_last=False, 
-            num_classes=num_classes, 
-            n_shot=0, 
-            weights_dir=None, 
+            crop_images= crop_images,
+            generator= torch.Generator(device),
+            pin_memory=True,
+            drop_last=False,
+            num_classes=num_classes,
+            n_shot=0,
+            weights_dir=None,
             patch_size=patch_size
-        ) 
+        )
         dl_inference = dl_test
 
-    return weight, pos_weight, dl_train, dl_test, dl_val, dl_inference
+    return weight, pos_weight, dl_train, dl_val, dl_test, dl_inference
 
 
 

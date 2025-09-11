@@ -152,7 +152,10 @@ class PhiSatDataset(Dataset):
                 raise ValueError("No matching samples after task filtering.")
 
         # Build patches list
+
         self.patches = self._generate_patches(self.sample_ids)
+        # assert all([len(sample) == 3 for sample in self.patches]), "Image shape wrong"
+        print("Created all patches.")
 
         # Compute class and pos weights at init
         self.class_weights, self.pos_weights = self._load_or_compute_weights()
@@ -196,7 +199,7 @@ class PhiSatDataset(Dataset):
                         # Skip if patch would be out-of-bounds or too small
                         if y + ph > h or x + pw > w:
                             continue
-                        #print(f"Appended patch at ({x}, {y}) from image {sid} with shape {img.shape}")
+                        # print(f"Appended patch at ({x}, {y}) from image {sid} with shape {img.shape}")
                         patches.append((sid, y, x))
             return patches
         else:
@@ -213,9 +216,9 @@ class PhiSatDataset(Dataset):
 
         img = self._load_zarr_array(sample_group['img'], y, x)
         label = self._load_zarr_array(sample_group['label'], y, x)
-        #print(f"Before preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
+        # print(f"Before preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
         img, label = self._preprocess(img, label, y, x)
-        #print(f"After preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
+        # print(f"After preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
         
         sample = {'img': img, 'label': label, 'task': sample_group.attrs.get('task', ''), 'sample_id': sid}
         for key in self.metadata_keys:
@@ -223,6 +226,7 @@ class PhiSatDataset(Dataset):
                 sample[key] = sample_group.attrs[key]
         if self.patch_size:
             sample['patch_coord'] = (y, x)
+
         return sample
 
     def _unpack_patch(self, patch):
@@ -598,7 +602,7 @@ class PhiSatDataset(Dataset):
         pos_weights = torch.from_numpy((neg / pos).astype(np.float32))
         return class_weights, pos_weights
 
-    def split_by_percentages(self, split: List[float], split_names: List[str]) -> List['PhiSatDataset']:
+    def split_by_percentages(self, split: List[float], split_names: List[str], shrink_val_set: float) -> List['PhiSatDataset']:
         """
         Splits the dataset into subsets according to specified percentages, 
         while maintaining class distribution as best as possible.
@@ -623,6 +627,14 @@ class PhiSatDataset(Dataset):
 
         if len(predefined) == len(split_names):
             # We have all splits predefined, so we use them
+            if shrink_val_set is not None:
+                assert 0. < shrink_val_set <= 1.0, "Validation can be reduced by [0%, 99%], not more or less."
+                k = max(1, int(len(predefined["validation"]) * shrink_val_set))
+                validation_shrunk = random.sample(predefined["validation"], k)
+                print(f"Original size: {len(predefined["validation"])}, New size: {len(validation_shrunk)}")
+
+                predefined["validation"] = validation_shrunk
+
             subsets = [predefined[name] for name in split_names]
         else:
             # Fallback: generate splits randomly, stratified by class
@@ -821,7 +833,8 @@ def get_zarr_dataloader(
     n_regions: int = 6, 
     save:bool = False, 
     split_names: List[str] = None, 
-    patch_size: Tuple[int, int] = None
+    patch_size: Tuple[int, int] = None,
+    shrink_val_set: float = 1.0,
     
 ) -> DataLoader:
     """
@@ -848,7 +861,9 @@ def get_zarr_dataloader(
     if isinstance(split, list) and isinstance(callback_pre_augmentation, list) and isinstance(callback_post_augmentation, list) and isinstance(augmentations, list):
         assert len(split) == len(callback_pre_augmentation) == len(callback_post_augmentation) == len(augmentations) == len(n_shot), \
             "Mismatch in lengths of split subsets and callbacks"
-    batch_size = 16
+
+    # TODO: Remove hard-coded batch size.
+    batch_size = batch_size
     dataset = PhiSatDataset(
         zarr_path=zarr_path,
         dataset_set=dataset_set,
@@ -868,16 +883,21 @@ def get_zarr_dataloader(
     print(f"Dataset {dataset_set} shapes: img={img.shape}, label={label.shape}")
     weights, pos_weights = dataset.class_weights, dataset.pos_weights
     print(f"weights: {weights}, pos_weights:{pos_weights}")
+
     if not split is None:
-        sub_datasets = dataset.split_by_percentages(split=split, split_names = split_names)
+        sub_datasets = dataset.split_by_percentages(split=split, split_names = split_names, shrink_val_set=shrink_val_set)
         dataloaders = []
         for idx, sub_dataset in enumerate(sub_datasets):
+
             if n_shot[idx] != 0:
+                # TODO: data loading error in the following line for e.g. roads, land use
                 sub_dataset._cluster_and_nshot(n_shots=n_shot[idx], n_regions=sub_dataset.n_regions, strategy=sub_dataset.n_shot_strategy, seed=SEED)
                 #sub_dataset.get_n_shots(strategy='stratified', n=n_shot[idx], seed=SEED)
+
             sub_dataset.callback_pre_augmentation=callback_pre_augmentation[idx]
             sub_dataset.callback_post_augmentation=callback_post_augmentation[idx]
             sub_dataset.augmentations=augmentations[idx]
+
             dataloaders.append(
                 DataLoader(
                     sub_dataset,
@@ -894,17 +914,18 @@ def get_zarr_dataloader(
         dataset.callback_pre_augmentation=callback_pre_augmentation
         dataset.callback_post_augmentation=callback_post_augmentation
         dataset.augmentations=augmentations
-        return  weights, pos_weights, DataLoader(
-                dataset,
-                batch_size=batch_size,
-                shuffle=shuffle,
-                num_workers=num_workers,
-                collate_fn=collate_fn,
-                generator=generator, 
-                pin_memory=pin_memory, 
-                drop_last=drop_last
-            )
-        
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            collate_fn=collate_fn,
+            generator=generator,
+            pin_memory=pin_memory,
+            drop_last=drop_last
+        )
+
+        return weights, pos_weights, loader
 
 
 if __name__ == "__main__":

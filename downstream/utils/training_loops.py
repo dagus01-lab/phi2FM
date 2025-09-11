@@ -1,25 +1,24 @@
 # Standard Library
 import os
-from tqdm import tqdm
-import builtins
-
-from matplotlib import pyplot as plt
-
-# import PyQt5
-# matplotlib.use('QtAgg') 
-from tabulate import tabulate
-
-# PyTorch
 import torch
+import wandb
+import json
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributed as dist
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
+
+# PyTorch
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler, autocast
-# from torch.amp import GradScaler, autocast
+from matplotlib import pyplot as plt
 from torchvision import transforms
-import numpy as np
-import json
-import torch.distributed as dist
+from sklearn.metrics import (
+    f1_score, precision_score, recall_score,
+    confusion_matrix, accuracy_score, jaccard_score
+)
 
 # utils
 from utils import visualize
@@ -44,10 +43,10 @@ def convert_to_builtin_types(obj):
 class TrainBase():
 
     def __init__(self, model: nn.Module, device: torch.device, train_loader: DataLoader, val_loader: DataLoader,
-                 test_loader: DataLoader, inference_loader: DataLoader, epochs:int = 50, early_stop:int=25, lr: float = 0.001, lr_scheduler: str = None, warmup:bool=True,
+                 test_loader: DataLoader, inference_loader: DataLoader, epochs:int = 50, early_stop:int=25, lr: float = 0.001, lr_scheduler: str = None,
                  metrics: list = None, name: str="model", out_folder :str ="trained_models/", visualise_validation:bool=True, 
                  warmup_steps:int=5, warmup_gamma:int=10, pos_weight:np.array=None, weights:np.array=None, save_info_vars:tuple = None, apply_zoom:bool=False, 
-                 climate_segm:bool=False, fixed_task:str=None, rank:int=None, min_lr:float=1e-6, perceptual_loss:bool=False, num_classes:int=4):
+                 climate_segm:bool=False, fixed_task:str=None, rank:int=None, min_lr:float=1e-6, perceptual_loss:bool=False, num_classes:int=4, wandb_run = None):
         
         self.train_mode = 'fp32' # choose between 'fp32', 'amp', 'fp16'
         self.val_mode = 'fp32' # choose between 'fp32', 'amp', 'fp16'
@@ -90,7 +89,6 @@ class TrainBase():
         self.inference_loader = inference_loader
         self.metrics = metrics
         self.lr_scheduler = lr_scheduler
-        self.warmup = warmup
         self.warmup_steps = warmup_steps
         self.name = name
         self.out_folder = out_folder
@@ -106,23 +104,10 @@ class TrainBase():
         self.criterion = self.set_criterion()
         self.scaler, self.optimizer = self.set_optimizer()
         self.scheduler = self.set_scheduler()
-
-        if self.warmup and warmup_gamma is not None:
-            multistep_milestone =  list(range(1, self.warmup_steps+1))
-            self.scheduler_warmup = torch.optim.lr_scheduler.MultiStepLR(
-                self.optimizer, milestones=multistep_milestone, gamma=(warmup_gamma))
-            
-        elif self.warmup and self.min_lr is not None:
-            def warmup_linear(epoch):
-                if epoch < warmup_steps:
-                    # Linear increase from `min_lr / max_lr` to `1.0` over `warmup_steps`
-                    return (self.min_lr + (self.learning_rate - self.min_lr) * (epoch / warmup_steps)) / self.learning_rate
-                return 1.0  # After warmup, maintain the learning rate (no scaling)
-
-            self.scheduler_warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=warmup_linear)
+        self.wandb_run = wandb_run
 
         # Save Info vars
-        self.model_summary, self.n_shot, self.split_ratio, self.warmup, self.init_lr = save_info_vars
+        self.model_summary, self.n_shot, self.split_ratio, self.init_lr = save_info_vars
         
         self.test_metrics = None
                 
@@ -195,17 +180,34 @@ class TrainBase():
 
     def set_scheduler(self):
         if self.lr_scheduler == 'cosine_annealing':
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            # Warmup scheduler: linearly increase LR from 0 to base LR
+            warmup_scheduler = LinearLR(
                 self.optimizer,
-                20,
-                2,
-                eta_min=0.000001,
-                last_epoch=self.epochs - 1,
+                start_factor=0.1,
+                end_factor=1.0,
+                total_iters=self.warmup_steps,
             )
+
+            # Cosine annealing scheduler: starts after warmup
+            cosine_scheduler = CosineAnnealingLR(
+                self.optimizer,
+                T_max=self.epochs - self.warmup_steps,
+                eta_min=1e-6,
+            )
+
+            # Combine both schedulers
+            scheduler = SequentialLR(
+                self.optimizer,
+                schedulers=[warmup_scheduler, cosine_scheduler],
+                milestones=[self.warmup_steps],
+            )
+
         elif self.lr_scheduler == 'reduce_on_plateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', factor=0.1, patience=6, min_lr=1e-6)
+
         else:
             scheduler = None
+
         return scheduler
 
     def get_loss(self, images, labels):
@@ -284,14 +286,18 @@ class TrainBase():
 
             train_loss += loss.item()
 
-            # display progress on console
-            train_pbar.set_postfix({
-                "loss": f"{train_loss / (i + 1):.4f}",
-                f"lr": self.optimizer.param_groups[0]['lr']})
+            avg_loss = train_loss / (i + 1)
+            lr = self.optimizer.param_groups[0]['lr']
 
-            # # Update the scheduler
-            if self.lr_scheduler == 'cosine_annealing':
-                s.step()
+            train_pbar.set_postfix({"loss": f"{avg_loss:.4f}", "lr": lr})
+
+            # wandb logging per batch (optional)
+            if self.wandb_run is not None:
+                wandb.log({"train/loss": loss.item(), "train/lr": lr, "epoch": epoch + 1})
+
+        # wandb logging per epoch
+        if self.wandb_run is not None:
+            wandb.log({"train/epoch_loss": train_loss / (i + 1), "epoch": epoch + 1})
 
         return i, train_loss
 
@@ -299,34 +305,139 @@ class TrainBase():
         visualize.visualize(x=images, y=labels, y_pred=outputs, images=5,
                             channel_first=True, vmin=0, vmax=1, save_path=f"{self.out_folder}/{name}.png")
 
-    def v_loop(self, epoch):
 
-        # Initialize the progress bar for training
+    def v_loop(self, epoch):
         val_pbar = tqdm(self.val_loader, total=len(self.val_loader),
-                          desc=f"Val {epoch + 1}/{self.epochs}")
+                        desc=f"Val {epoch + 1}/{self.epochs}")
 
         with torch.no_grad():
             self.model.eval()
             val_loss = 0
+            all_preds = []
+            all_labels = []
+
             for j, (images, labels) in enumerate(val_pbar):
-                # Move inputs and targets to the device (GPU)
                 images, labels = images.to(self.device), labels.to(self.device)
-                # get loss
                 loss = self.get_loss(images, labels)
                 val_loss += loss.item()
 
-                # display progress on console
-                val_pbar.set_postfix({
-                    "loss": f"{val_loss / (j + 1):.4f}",
-                    f"lr": self.optimizer.param_groups[0]['lr']})
-
-            if self.visualise_validation:
-                outputs = self.model(images)
-
-                if type(outputs) is tuple:
+                # Collect predictions and labels
+                outputs = self.model(images).output
+                if isinstance(outputs, tuple):
                     outputs = outputs[0]
 
-                self.val_visualize(images.detach().cpu().numpy(), labels.detach().cpu().numpy(), outputs.detach().cpu().numpy(), name=f'/val_images/val_{epoch}')
+                all_preds.append(outputs.detach().cpu())
+                all_labels.append(labels.detach().cpu())
+
+                avg_loss = val_loss / (j + 1)
+                lr = self.optimizer.param_groups[0]['lr']
+                val_pbar.set_postfix({"loss": f"{avg_loss:.4f}", "lr": lr})
+
+                if self.wandb_run is not None:
+                    wandb.log({"val/loss": loss.item(), "val/lr": lr, "epoch": epoch + 1})
+
+            # Concatenate predictions and labels
+            all_preds = torch.cat(all_preds)  # (N, C, H, W)
+            all_labels = torch.cat(all_labels)  # (N, C, H, W) one-hot OR (N, H, W) indices
+
+            # No NaNs/Infs
+            assert torch.isfinite(all_preds).all(), "NaNs/Infs in predictions"
+            assert torch.isfinite(all_labels).all(), "NaNs/Infs in labels"
+
+            num_classes = all_preds.shape[1]
+            # Turn predicted logits/probabilities into class indices: (N, H, W)
+            pred_classes = all_preds.argmax(dim=1)  # int64
+
+            # Turn labels into class indices: handle (N,C,H,W) one-hot or (N,H,W) indices
+            if all_labels.ndim == 4 and all_labels.shape[1] == num_classes:
+                true_classes = all_labels.argmax(dim=1).long()  # (N,H,W)
+            elif all_labels.ndim == 3:
+                true_classes = all_labels.long()  # (N,H,W)
+            else:
+                raise ValueError(
+                    f"Labels must be (N,C,H,W) one-hot or (N,H,W) indices, got {tuple(all_labels.shape)}"
+                )
+
+            # OPTIONAL: if you have an ignore label (e.g., 255 or -100), mask it out here
+            ignore_index = None  # set to e.g., 255 or -100 if you use one
+            if ignore_index is not None:
+                mask = (true_classes != ignore_index)
+            else:
+                mask = torch.ones_like(true_classes, dtype=torch.bool)
+
+            # Flatten for sklearn
+            y_true_flat = true_classes[mask].view(-1).cpu().numpy()
+            y_pred_flat = pred_classes[mask].view(-1).cpu().numpy()
+
+            # If some classes are never present, it's safer to specify labels explicitly
+            labels_list = list(range(num_classes))
+
+            # --- Core metrics ---
+            acc = accuracy_score(y_true_flat, y_pred_flat)
+
+            micro_f1 = f1_score(y_true_flat, y_pred_flat, average='micro', labels=labels_list)
+            macro_f1 = f1_score(y_true_flat, y_pred_flat, average='macro', labels=labels_list)
+            per_class_f1 = f1_score(y_true_flat, y_pred_flat, average=None, labels=labels_list)
+
+            # mIoU (mean Jaccard) and per-class IoU
+            miou = jaccard_score(y_true_flat, y_pred_flat, average='macro', labels=labels_list)
+            per_class_iou = jaccard_score(y_true_flat, y_pred_flat, average=None, labels=labels_list)
+            macro_prec = precision_score(y_true_flat, y_pred_flat, average='macro', labels=labels_list, zero_division=0)
+            macro_rec = recall_score(y_true_flat, y_pred_flat, average='macro', labels=labels_list, zero_division=0)
+            per_class_prec = precision_score(y_true_flat, y_pred_flat, average=None, labels=labels_list,
+                                             zero_division=0)
+            per_class_rec = recall_score(y_true_flat, y_pred_flat, average=None, labels=labels_list, zero_division=0)
+
+            # Confusion Matrix
+            cm = confusion_matrix(y_true_flat, y_pred_flat, labels=labels_list)
+
+            # NOTE: Your current MSE between raw logits and one-hot labels is not a standard metric for multiclass.
+            # If you want to keep a regression-like diagnostic, at least compare softmax probabilities vs one-hot:
+            with torch.no_grad():
+                probs = F.softmax(all_preds, dim=1)
+                if all_labels.ndim == 3:
+                    # convert index labels to one-hot for MSE diagnostic
+                    one_hot = F.one_hot(true_classes, num_classes=num_classes).permute(0, 3, 1, 2).float()
+                else:
+                    one_hot = all_labels.float()
+                mse = F.mse_loss(probs, one_hot).item()
+
+            # Visualization
+            if self.visualise_validation:
+                self.val_visualize(images.detach().cpu().numpy(),
+                                   all_labels.detach().cpu().numpy(),
+                                   all_preds.detach().cpu().numpy(),
+                                   name=f'/val_images/val_{epoch}')
+                if self.wandb_run is not None:
+                    wandb.log({"val/image": wandb.Image(f"{self.out_folder}/val_images/val_{epoch}.png")})
+
+            # WandB logging
+            if self.wandb_run is not None:
+                # Scalar summaries
+                wandb.log({
+                    "val/epoch_loss": val_loss / (j + 1),
+                    "val/acc": acc,
+                    "val/micro_f1": micro_f1,
+                    "val/macro_f1": macro_f1,
+                    "val/mIoU": miou,
+                    "val/mse_prob_vs_onehot": mse,
+                    "epoch": epoch + 1
+                })
+                # Per-class tables/vectors (log as dict for easy plots)
+                wandb.log({
+                    "val/per_class_f1": {f"class_{c}": float(per_class_f1[c]) for c in range(num_classes)},
+                    "val/per_class_iou": {f"class_{c}": float(per_class_iou[c]) for c in range(num_classes)},
+                    "val/per_class_precision": {f"class_{c}": float(per_class_prec[c]) for c in range(num_classes)},
+                    "val/per_class_recall": {f"class_{c}": float(per_class_rec[c]) for c in range(num_classes)},
+                    "epoch": epoch + 1
+                })
+                # Confusion matrix
+                wandb.log({"val/confusion_matrix": wandb.plot.confusion_matrix(
+                    probs=None,
+                    y_true=y_true_flat.tolist(),
+                    preds=y_pred_flat.tolist(),
+                    class_names=[f"class_{c}" for c in labels_list]
+                )})
 
             return j, val_loss
 
@@ -383,14 +494,6 @@ class TrainBase():
 
         # Training loop
         for epoch in range(self.epochs):
-            if epoch == 0 and self.warmup == True:
-                s = self.scheduler_warmup
-                print('Starting linear warmup phase')
-            elif epoch == self.warmup_steps and self.warmup == True:
-                s = self.scheduler
-                self.warmup = False
-                print('Warmup finished')
-
             i, train_loss = self.t_loop(epoch, s)
             if epoch % 3 == 0:
                 j, val_loss = self.v_loop(epoch)
@@ -401,10 +504,12 @@ class TrainBase():
             self.lr.append(self.optimizer.param_groups[0]['lr'])
 
             # Update the scheduler
-            if self.warmup:
-                s.step()
-            elif self.lr_scheduler == 'reduce_on_plateau':
+            if self.lr_scheduler == 'reduce_on_plateau':
                 s.step(self.vl[-1])
+            elif self.lr_scheduler == 'cosine_annealing':
+                self.scheduler.step()
+            else:
+                raise NotImplementedError
 
             #save check point
             self.save_ckpt(epoch, val_loss / (j + 1))
@@ -444,7 +549,7 @@ class TrainBase():
             print(f"Test Loss: {self.test_metrics}")
             outputs = self.model(images)
             self.val_visualize(images.detach().cpu().numpy(), labels.detach().cpu().numpy(),
-                               outputs.detach().cpu().numpy(), name='test')
+                               outputs.output.detach().cpu().numpy(), name='test')
 
         if isinstance(self.model, nn.DataParallel):
             model_sd = self.model.module.state_dict().copy()
@@ -482,14 +587,13 @@ class TrainBase():
             json.dump(artifacts, outfile, indent=4)
 
 
-    def save_info(self, model_summary=None, n_shot=None, p_split=None, warmup=None, lr=None):
+    def save_info(self, model_summary=None, n_shot=None, p_split=None, lr=None):
         print("Saving artifacts...")
         artifacts = {
             'training_parameters': {
                 'model': self.name,
                 'lr': lr,
                 'scheduler': self.lr_scheduler,
-                'warm_up': warmup,
                 'optimizer': str(self.optimizer).split(' (')[0],
                 'device': str(self.device),
                 'training_epochs': self.epochs,
@@ -1152,7 +1256,7 @@ class TrainSegmentationBurned(TrainBase):
         # 1) Forward pass → raw logits
         #print(images.shape)
          #print(outputs.shape)
-        outputs = self.model(images)  # shape [B, 4, H, W]
+        outputs = self.model(images).output  # shape [B, 4, H, W]
     
         # 2) Convert one-hot (or channel‑first mask) to integer indices [B, H, W]
         #    If your labels come in as one-hot: labels.shape == [B, 4, H, W]
@@ -1294,11 +1398,9 @@ class TrainSegmentationBurned(TrainBase):
 
         # Otherwise, compute the confusion matrix from model predictions
         else:
-            outputs = self.model(images)
+            outputs = self.model(images).output
             outputs = torch.argmax(outputs, dim=1).long()
             labels = torch.argmax(labels, dim=1).long()
-            print(outputs.shape)
-            print(labels.shape)
             #outputs = outputs.argmax(axis=1).flatten()
             #labels = labels.squeeze().flatten()
 

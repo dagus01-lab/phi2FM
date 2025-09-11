@@ -19,7 +19,7 @@ split_ratio: null #1.
 regions: null
 vis_val: True
 warmup: True
-warmp_steps: 5
+warmup_steps: 5
 warmup_gamma: 10
 min_lr: null
 pretrained_model_path:  /home/gdaga/pretrained_weights/B13_rn50_dino_0099.pth
