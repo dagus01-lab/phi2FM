@@ -1,56 +1,66 @@
-from data_loader2 import get_zarr_dataloader, NormalizeChannels
-from tqdm import tqdm
-import torch
 import zarr
+import numpy as np
 
-# Path to the input Zarr dataset
-#zarr_path = "/Data/fire_dataset/fire_dataset.zarr"
-zarr_path = "/Data/worldfloods/worldfloods.zarr"
-# Select dataset split: "trainval" or "test"
-dataset_set = "trainval"
-#zarr.open(zarr_path)
-# Initialize a PyTorch DataLoader from a Zarr-based dataset
-_, _, dataloader = get_zarr_dataloader(
-    zarr_path=zarr_path,                     # Path to the Zarr archive
-    dataset_set=dataset_set,                 # Dataset subset to use
-    batch_size=16,                           # Number of samples per batch
-    shuffle=True,                            # Enable shuffling (useful for training)
-    num_workers=4,                           # Number of parallel workers for loading
-    #transform=NormalizeChannels(min_max=True),  # Normalize input channels to [0, 1]
-    task_filter="segmentation",              # Only load data for the "segmentation" task
-    metadata_keys=["sensor", "timestamp", "geolocation", "crs"],   # Include auxiliary metadata fields
-)
+def compute_band_stats(zarr_path, group='trainval', img_key='img'):
+    """
+    Computes mean and stddev for each band in a Zarr dataset.
+    Assumes images are stored under group/img_key with shape [bands, height, width] or [height, width, bands].
+    """
+    # Open Zarr group
+    z = zarr.open(zarr_path, mode='r')
+    if group not in z:
+        raise ValueError(f"Group '{group}' not found in Zarr archive.")
+    g = z[group]
 
+    # Collect all sample keys
+    sample_keys = [k for k in g.array_keys() if img_key in k or k == img_key]
+    if not sample_keys:
+        sample_keys = [k for k in g.group_keys()]
+    if not sample_keys:
+        raise ValueError(f"No image arrays found under group '{group}'.")
 
-all_unique_labels = set()
+    # Accumulate stats
+    band_sum = None
+    band_sum_sq = None
+    n_pixels = 0
 
-try:
-    for idx, batch in enumerate(tqdm(dataloader, desc="Processing Batches")):
-        for task in batch['tasks']:
-            labels = batch[f'{task}_label']  # Might be shape (B, H, W) or list of scalars
-    
-            # Case 1: If labels is a tensor (e.g. B x H x W)
-            if isinstance(labels, torch.Tensor):
-                unique_vals = torch.unique(labels)
-                all_unique_labels.update(unique_vals.cpu().numpy().tolist())
-    
-            # Case 2: If labels is a list/array of scalars
-            elif isinstance(labels, (list, tuple)):
-                for label in labels:
-                    if isinstance(label, torch.Tensor):
-                        unique_vals = torch.unique(label)
-                    else:
-                        # If label is scalar (e.g. float32), wrap in tensor first
-                        label_tensor = torch.tensor(label)
-                        unique_vals = torch.unique(label_tensor)
-    
-                    all_unique_labels.update(unique_vals.cpu().numpy().tolist())
-    
-            else:
-                raise TypeError(f"Unexpected label type: {type(labels)}")
-except Exception as e:
-    print(e)
+    for sid in g.group_keys():
+        arr = g[sid][img_key][:]
+        label = g[sid]['label'][:]
+        print(f"Sample {sid}: number of zeros: {(label == 0).sum()}, number of nans: {np.isnan(arr).sum()}")
+        if np.isnan(arr).any():
+            print(f"Sample {sid}: min={np.nanmin(arr)}, max={np.nanmax(arr)}, nan_count={np.isnan(arr).sum()}")
+            continue
+        # Ensure shape is [bands, height, width]
+        if arr.ndim == 3:
+            if arr.shape[0] <= arr.shape[-1]:  # [bands, h, w]
+                arr = arr
+            else:  # [h, w, bands]
+                arr = np.transpose(arr, (2, 0, 1))
+        else:
+            continue  # skip non-3D arrays
 
-# Final result
-print(f"\nAll unique label values seen across all batches and tasks: {sorted(all_unique_labels)}")
-print(f"Total number of classes: {len(all_unique_labels)}")
+        bands, h, w = arr.shape
+        arr_reshaped = arr.reshape(bands, -1)  # [bands, pixels]
+        if band_sum is None:
+            band_sum = np.zeros(bands, dtype=np.float64)
+            band_sum_sq = np.zeros(bands, dtype=np.float64)
+        band_sum += arr_reshaped.sum(axis=1)
+        band_sum_sq += (arr_reshaped ** 2).sum(axis=1)
+        n_pixels += arr_reshaped.shape[1]
+
+    mean = band_sum / n_pixels
+    std = np.sqrt(band_sum_sq / n_pixels - mean ** 2)
+
+    print("Band statistics:")
+    print(f"Means per band: {mean}")
+    print(f"Stds per band: {std}")
+    #for i, (m, s) in enumerate(zip(mean, std)):
+    #    print(f"Band {i}: mean={m:.5f}, std={s:.5f}")
+
+    return mean, std
+
+if __name__ == "__main__":
+    import sys
+    zarr_path = sys.argv[1] if len(sys.argv) > 1 else "/Data/anomaly_detection/marine_area_dataset.zarr"
+    compute_band_stats(zarr_path)
