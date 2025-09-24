@@ -109,7 +109,7 @@ def to_one_hot_building(y):
 
 
 def pad_bands(x):
-    PROCESS_PHISAT = 13
+    # PROCESS_PHISAT = 13
 
     if x.shape[2] == 8:
         if PROCESS_PHISAT == 10:
@@ -655,7 +655,7 @@ def load_data(dataset_path,
             cb_decoder = callback_decoder_landcover_prithvi
         elif downstream_task == 'fire':
             cb_decoder = callback_decoder_prithvi_fire
-        elif downstream_task == 'burned_area' or downstream_task == 'worldfloods':
+        elif downstream_task == 'burned_area' or downstream_task == 'worldfloods' or downstream_task == 'anomaly_detection':
             cb_decoder = callback_decoder_prithvi_burned_area
         elif downstream_task == "clouds":
             cb_decoder = callback_decoder_prithvi_clouds
@@ -666,7 +666,7 @@ def load_data(dataset_path,
             cb_decoder = callback_decoder_phisatnet_lc
         elif downstream_task == 'fire':
             cb_decoder = callback_decoder_phisatnet_fire
-        elif downstream_task == 'burned_area' or downstream_task == 'worldfloods':
+        elif downstream_task == 'burned_area' or downstream_task == 'worldfloods'  or downstream_task == 'anomaly_detection':
             cb_decoder = callback_decoder_phisatnet_burned_area
         elif downstream_task == "clouds":
             cb_decoder = callback_decoder_phisatnet_clouds
@@ -679,7 +679,7 @@ def load_data(dataset_path,
             cb_decoder = callback_decoder_building_classification
         elif downstream_task == 'geo':
             cb_decoder = callback_decoder_geo
-        elif downstream_task == 'burned_area' or downstream_task == 'worldfloods':
+        elif downstream_task == 'burned_area' or downstream_task == 'worldfloods' or downstream_task == 'anomaly_detection':
             cb_decoder = callback_decoder_burned_area
         elif downstream_task == "clouds":
             cb_decoder = callback_decoder_clouds
@@ -701,7 +701,7 @@ def load_data(dataset_path,
                 cb_preprocess = callback_preprocess_landcover_satmae
             elif downstream_task == 'fire':
                 cb_preprocess = callback_preprocess_fire_satmae
-            elif downstream_task == 'burned_area' or downstream_task == "worldfloods":
+            elif downstream_task == 'burned_area' or downstream_task == "worldfloods"  or downstream_task == 'anomaly_detection':
                 cb_preprocess = callback_preprocess_burned_area_satmae
             else:
                 cb_preprocess = callback_preprocess_satmae
@@ -712,7 +712,7 @@ def load_data(dataset_path,
                 cb_preprocess = callback_preprocess_landcover_prithvi
             elif downstream_task == 'fire':
                 cb_preprocess = callback_preprocess_fire_prithvi
-            elif downstream_task == 'burned_area' or downstream_task == "worldfloods":
+            elif downstream_task == 'burned_area' or downstream_task == "worldfloods"  or downstream_task == 'anomaly_detection':
                 cb_preprocess = callback_preprocess_prithvi_burned_area
             elif downstream_task == "clouds":
                 cb_preprocess = callback_preprocess_prithvi_clouds
@@ -722,7 +722,7 @@ def load_data(dataset_path,
             #print("phisatnet preprocessing")
             if downstream_task == 'lc':
                 cb_preprocess = callback_preprocess_phisatnet_lc
-            elif downstream_task == "burned_area" or downstream_task == "worldfloods":
+            elif downstream_task == "burned_area" or downstream_task == "worldfloods"  or downstream_task == 'anomaly_detection':
                 cb_preprocess = callback_preprocess_phisatnet_burned_area
             else:
                 cb_preprocess = callback_preprocess_phisatnet

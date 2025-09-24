@@ -322,7 +322,7 @@ class TrainBase():
                 val_loss += loss.item()
 
                 # Collect predictions and labels
-                outputs = self.model(images).output
+                outputs = self.model(images)
                 if isinstance(outputs, tuple):
                     outputs = outputs[0]
 
@@ -549,7 +549,7 @@ class TrainBase():
             print(f"Test Loss: {self.test_metrics}")
             outputs = self.model(images)
             self.val_visualize(images.detach().cpu().numpy(), labels.detach().cpu().numpy(),
-                               outputs.output.detach().cpu().numpy(), name='test')
+                               outputs.detach().cpu().numpy(), name='test')
 
         if isinstance(self.model, nn.DataParallel):
             model_sd = self.model.module.state_dict().copy()
@@ -1256,7 +1256,7 @@ class TrainSegmentationBurned(TrainBase):
         # 1) Forward pass → raw logits
         #print(images.shape)
          #print(outputs.shape)
-        outputs = self.model(images).output  # shape [B, 4, H, W]
+        outputs = self.model(images) #.output  # shape [B, 4, H, W]
     
         # 2) Convert one-hot (or channel‑first mask) to integer indices [B, H, W]
         #    If your labels come in as one-hot: labels.shape == [B, 4, H, W]
@@ -1398,7 +1398,7 @@ class TrainSegmentationBurned(TrainBase):
 
         # Otherwise, compute the confusion matrix from model predictions
         else:
-            outputs = self.model(images).output
+            outputs = self.model(images)
             outputs = torch.argmax(outputs, dim=1).long()
             labels = torch.argmax(labels, dim=1).long()
             #outputs = outputs.argmax(axis=1).flatten()
@@ -1433,6 +1433,30 @@ class TrainSegmentationWorldfloods(TrainSegmentationBurned):
             labels=['Clouds', 'Land', 'Water'],
             save_path=f"{self.out_folder}/{name}.png"
         )
+class TrainAnomalyDetection(TrainSegmentationBurned):
+    def val_visualize(self, images, labels, outputs, name):
+        #print(outputs.shape)
+        #print(labels.shape)
+        outputs_tensor = torch.from_numpy(outputs)  # now a FloatTensor [B, C, H, W]
+        outputs_labels = torch.argmax(outputs_tensor, dim=1)  # [B, H, W]
+        labels_tensor = torch.from_numpy(labels)
+        y_labels = torch.argmax(labels_tensor, dim=1)  # [B, H, W]
+        #outputs_labels = torch.argmax(outputs, dim=1)  # [B, H, W] class indices
+        visualize.visualize_burned_area(
+            x=images,
+            y=y_labels,      # labels to class indices for visualization
+            y_pred=outputs_labels.cpu().numpy(),
+            images=5,
+            channel_first=True,
+            num_classes=9,
+            labels=['NO DATA', 'CLEAR WATER', 'TURBID WATER', 'LAND', 'PLASTIC', 'OIL', 'ALGAE', 'SEDIMENTS', 'CLOUD'],
+            save_path=f"{self.out_folder}/{name}.png"
+        )
+    def set_criterion(self):
+        # BCEWithLogitsLoss for binary segmentation
+        print(self.weights)
+        return nn.CrossEntropyLoss(torch.tensor(self.weights), ignore_index=0)
+    
 class TrainClassificationFire(TrainClassificationBuildings):
     def set_criterion(self):
         # BCEWithLogitsLoss for binary segmentation

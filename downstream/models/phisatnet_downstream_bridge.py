@@ -19,7 +19,7 @@ class PhiSatNetDownstream(nn.Module):
         img_size: int = 224,
         norm_foundation: str = "group",
         norm_downstream: str = "batch",
-        activation: str = "relu",
+        activation: str = "gelu",
         freeze_body: bool = False
     ):
         """
@@ -41,7 +41,7 @@ class PhiSatNetDownstream(nn.Module):
             freeze_body (bool): If True, freezes the parameters of the pretrained stem and encoder.
         """
         super().__init__()
-        print(f"Initializing PhiSatNetDownstream with task={task}, input_dim={input_dim}, output_dim={output_dim}, img_size={img_size}, depths={depths}, dims={dims}")
+
         if depths is None or dims is None:
             raise ValueError("Both 'depths' and 'dims' must be specified and match the pretrained model.")
         if output_dim is None:
@@ -81,13 +81,12 @@ class PhiSatNetDownstream(nn.Module):
         if self.task == "segmentation":
             print("Loading segmentation model")
             # Bridge + Decoder + Head (no pretrained weights used here).
-            self.bridge = None
-            # CoreCNNBlock(
-            #         in_channels=self.dims[-1],
-            #         out_channels=self.dims[-1],
-            #         norm=self.norm_downstream,
-            #         activation=self.activation,
-            # )
+            self.bridge = CoreCNNBlock(
+                    in_channels=self.dims[-1],
+                    out_channels=self.dims[-1],
+                    norm=self.norm_downstream,
+                    activation=self.activation,
+            )
             self.decoder = FoundationDecoder(
                 depths=self.depths,
                 dims=self.dims,
@@ -214,8 +213,8 @@ class PhiSatNetDownstream(nn.Module):
 
         # 3) Downstream branch
         if self.task == "segmentation":
-            #bottom_feats = self.bridge(bottom)                  # shape: (B, dims[-1], H, W)
-            decoded_feats = self.decoder(bottom, skips)   # shape: (B, dims[0], H, W)
+            bottom_feats = self.bridge(bottom)                  # shape: (B, dims[-1], H, W)
+            decoded_feats = self.decoder(bottom_feats, skips)   # shape: (B, dims[0], H, W)
             seg_logits = self.head(decoded_feats)               # shape: (B, output_dim, H, W)
             return seg_logits
 

@@ -158,6 +158,14 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
                                                            warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
                                                            save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
+        elif downstream_task == 'anomaly_detection':
+            trainer = training_loops.TrainAnomalyDetection(epochs=epochs, lr=lr, model=model, device=device,
+                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           train_loader=dl_train,
+                                                           val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
+                                                           out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
+                                                           warmup_steps=warmup_steps, warmup_gamma=warmup_gamma,
+                                                           save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, num_classes=9)
         elif downstream_task == 'worldfloods':
             trainer = training_loops.TrainSegmentationWorldfloods(epochs=epochs, lr=lr, model=model, device=device,
                                                            lr_scheduler=lr_scheduler, early_stop=early_stop,
@@ -271,7 +279,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
     if model_name == 'phisatnet' or model_name == 'phisatnet_classifier':
         core_kwargs = get_phisat2_model(model_size='nano', unet_type='geoaware')
         print(f'core_kwargs: {core_kwargs}')
-        model = PhiSatNetDownstream(pretrained_path=path_model_weights, 
+        model = PhiSatNetDownstream(pretrained_path=path_model_weights,    ###
                                      task='segmentation' if model_name == 'phisatnet' else 'classification',
                                      input_dim=input_channels,
                                      output_dim=output_channels,
@@ -287,7 +295,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
 
         sd = torch.load(path_model_weights)
         core_kwargs = get_core_encoder_kwargs(output_dim=output_channels, input_dim=input_channels, core_size='core_nano', full_unet=True)
-        model = CoreEncoderGeoPretrained(output_channels, checkpoint=sd, core_encoder_kwargs=core_kwargs, freeze_body=freeze)
+        model = CoreEncoderGeoPretrained(output_channels, checkpoint=sd, core_encoder_kwargs=core_kwargs, freeze_body=freeze) ###
         model(test_input)
         return model
 
@@ -362,7 +370,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
 
     elif model_name == 'SatMAE':
         sd = torch.load(path_model_weights)
-        satmae_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        satmae_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano') ### 1024 * 3
         return satmae_vit_cnn(img_size=96, patch_size=8, in_chans=input_channels,
                               checkpoint=sd, freeze_body=freeze, classifier=False, **satmae_kwargs)
 
@@ -374,7 +382,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
 
     elif model_name == 'prithvi':
         sd = torch.load(path_model_weights, map_location=device)
-        prithvi_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        prithvi_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano') ### 768 ( in downstream/utils/Prithvi_100M_config.py)
         return prithvi(checkpoint=sd, freeze_body=freeze, **prithvi_kwargs)
 
     elif model_name == 'prithvi_classifier':
@@ -415,7 +423,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         return vit_cnn_gc_classifier(checkpoint=sd, freeze_body=freeze, output_dim=output_channels)
 
     elif model_name == 'seasonal_contrast':
-        seco_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        seco_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano') ###
         return seasonal_contrast(checkpoint=path_model_weights, freeze_body=freeze,
                                  **seco_kwargs)
 
@@ -425,7 +433,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
                                  **seco_kwargs)
     
     elif model_name == 'moco':
-        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano') ### 
         return moco_resnet(path_model_weights, classifier=False, bands=13, **resnet_kwargs)
     
     elif model_name == 'moco_classifier':
@@ -433,7 +441,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         return moco_resnet(path_model_weights, classifier=True, bands=13, **resnet_kwargs)
 
     elif model_name == 'gassl':
-        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano') ### 2048
         return moco_resnet(path_model_weights, classifier=False, bands=3, **resnet_kwargs)
     
     elif model_name == 'gassl_classifier':
@@ -441,7 +449,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         return moco_resnet(path_model_weights, classifier=True, bands=3, **resnet_kwargs)
 
     elif model_name == 'caco':
-        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano') ### 2048
         return moco_resnet(path_model_weights, classifier=False, bands=4, **resnet_kwargs)
 
     elif model_name == 'caco_classifier':
@@ -449,7 +457,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         return moco_resnet(path_model_weights, classifier=True, bands=4, **resnet_kwargs)
 
     elif model_name == 'dino':
-        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano')
+        resnet_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano') ### 2048
         return dino_resnet(path_model_weights, classifier=False, **resnet_kwargs)
     
     elif model_name == 'dino_classifier':
@@ -537,6 +545,7 @@ def main(experiment_name,
          split_ratio,
          regions,
          vis_val,
+         warmup,
          warmup_steps,
          warmup_gamma,
          pretrained_model_path,
@@ -701,8 +710,8 @@ def main(experiment_name,
         }
 
         input_size_total = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
-        # model_summary = summary(model, input_size=input_size_total, dtypes=[torch.float32])
-        model_summary = None
+        model_summary = summary(model, input_size=input_size_total, dtypes=[torch.float32])
+        #model_summary = None
 
         if model_device == 'cpu':
             model.to(model_device)
@@ -761,7 +770,8 @@ def main(experiment_name,
         'fire': 4, 
         'burned_area':4, 
         'clouds': 5, 
-        'worldfloods': 3
+        'worldfloods': 3,
+        'anomaly_detection': 9
     }
     assert output_channels == task_output_channels[downstream_task], (
         f"{downstream_task} tasks should have {task_output_channels[downstream_task]} output channels, it has {output_channels}."
@@ -1009,7 +1019,7 @@ if __name__ == "__main__":
 
     for n_shot in n_shot_list:
         args.n_shot = n_shot
-        for freeze_pretrained in [True, False]:
+        for freeze_pretrained in [False, True]:
         #for freeze_pretrained in [True]:
             args.freeze_pretrained = freeze_pretrained
             if freeze_pretrained:

@@ -3,9 +3,9 @@
 # Define the list of configuration files
 
 configs=(
-    "args/finetune_FMs/lpl_burned_area/geoaware.yml"
+    #"args/finetune_FMs/lpl_burned_area/geoaware.yml"
     #"args/finetune_FMs/lpl_burned_area/moco.yml"
-    #"args/finetune_FMs/lpl_burned_area/phisatnet.yml"
+    "args/finetune_FMs/lpl_burned_area/phisatnet.yml"
     #"args/finetune_FMs/lpl_burned_area/dino.yml"
     #"args/finetune_FMs/lpl_burned_area/seco.yml"
     #"args/finetune_FMs/lpl_burned_area/uniphi.yml"

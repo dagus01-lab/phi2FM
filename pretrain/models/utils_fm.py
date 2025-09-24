@@ -351,9 +351,12 @@ def get_phisat2_model(
     unet_type='uniphi', # 'uniphi', 'geoaware'
     **kwargs
     ):
-    
-    if model_size == 'nano':            # Full mode: 298.00 MB -- Encoder: 73.690 MB
-        depths = [2, 2, 8, 2]
+    print(f"Getting PhiSat2 model of size: \"{model_size}\"")
+    if model_size == 'super_nano':
+        depths = [1, 1, 1, 1]
+        dims = [80, 160, 320, 640]
+    elif model_size == 'nano':            # Full mode: 298.00 MB -- Encoder: 73.690 MB
+        depths = [2, 2, 2, 2]
         dims = [80, 160, 320, 640]
     
     elif model_size == 'mini':          # Full mode: 298.00 MB -- Encoder: 73.690 MB

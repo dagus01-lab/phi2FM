@@ -224,9 +224,9 @@ class CoreUnet(nn.Module):
 
         self.decoder_blocks = nn.ModuleList(self.decoder_blocks)
 
-        self.bridge = nn.Sequential(
-            CoreCNNBlock(self.dims[-1], self.dims[-1], norm=self.norm, activation=self.activation, padding=self.padding),
-        )
+        # self.bridge = nn.Sequential(
+        #     CoreCNNBlock(self.dims[-1], self.dims[-1], norm=self.norm, activation=self.activation, padding=self.padding),
+        # )
 
         self.head = nn.Sequential(
             CoreCNNBlock(self.dims[0], self.dims[0], norm=self.norm, activation=self.activation, padding=self.padding),
@@ -240,7 +240,7 @@ class CoreUnet(nn.Module):
             x, skip = block(x)
             skip_connections.append(skip)
 
-        x = self.bridge(x)
+        # x = self.bridge(x)
 
         for block in self.decoder_blocks:
             skip = skip_connections.pop()

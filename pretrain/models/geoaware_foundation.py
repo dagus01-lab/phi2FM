@@ -5,7 +5,7 @@ from typing import List # need because using python 3.8
 
 from pretrain.models.geoaware_blocks import CoreCNNBlock, CoreAttentionBlock
 from pretrain.models.util_tools import make_bilinear_upsample, get_activation
-
+from terratorch.models import EncoderDecoderFactory
 # -------------------------------------------------------------------
 # FOUNDATION MODEL
 # -------------------------------------------------------------------
@@ -288,7 +288,7 @@ class CoreDecoderBlock(nn.Module):
 
         self.upsample = make_bilinear_upsample(self.in_channels)
         self.match_channels = CoreCNNBlock(self.in_channels * 2, self.out_channels, norm=self.norm, activation=self.activation_blocks)
-        self.attention = CoreAttentionBlock(self.in_channels, self.in_channels, norm=self.norm, activation=self.activation_blocks)
+        #self.attention = CoreAttentionBlock(self.in_channels, self.in_channels, norm=self.norm, activation=self.activation_blocks)
 
         self.blocks = []
         for _ in range(self.depth):
@@ -299,16 +299,35 @@ class CoreDecoderBlock(nn.Module):
     
     def forward(self, x, skip):
         x = self.upsample(x)
-        attn_s, attn_c = self.attention(x, skip)
-        x = torch.cat([x, (skip * attn_s) + (skip + attn_c)], dim=1)
+        #attn_s, attn_c = self.attention(x, skip)
+        #x = torch.cat([x, (skip * attn_s) + (skip + attn_c)], dim=1)
+        x = torch.cat([x, skip], dim=1)
         x = self.match_channels(x)
 
         for i in range(self.depth):
             x = self.blocks[i](x)
         return x
 
+class TeraMindDecoder(nn.Module):
+    def __init__(
+        self,
+        decoder_name: str = "UNetDecoder",
+        decoder_channels: list = [512, 256, 128, 64],
+        decoder_kwargs: dict = None,
+        num_classes: int = 4,
+        necks: list = None,
+    ):
+        super().__init__()
 
-
+        self.decoder, _ = EncoderDecoderFactory()._get_decoder_and_head_kwargs(
+            decoder=decoder_name,
+            channel_list=decoder_channels,
+            decoder_kwargs=decoder_kwargs or {},
+            head_kwargs={},
+            num_classes=num_classes,
+        )[0]
+    def forward(self, x, skip_list):
+        return self.decoder(x, skip_list)
 
 class FoundationDecoder(nn.Module):
     """

@@ -262,13 +262,16 @@ def vit_cnn(checkpoint, img_size=128, patch_size=4, in_chans=10, output_dim=1, f
     return model
 
 
-def get_core_decoder_kwargs(output_dim, core_size, full_unet=True, **kwargs):
+def get_core_decoder_kwargs(output_dim, core_size, full_unet=False, **kwargs):
     core_kwargs = {'output_dim': output_dim, 'decoder_norm': 'batch', 'decoder_padding': 'same',
                    'decoder_activation': 'relu'}
 
     if core_size == 'core_nano':
-        core_kwargs['decoder_depths'] = [2, 2, 8, 2]
-        core_kwargs['decoder_dims'] = [80, 160, 320, 640]
+        core_kwargs['decoder_depths'] = [2, 2, 8, 2] if full_unet else [2, 2, 2, 2]
+        core_kwargs['decoder_dims'] = [80, 160, 320, 640] #if full_unet else [80, 80, 80, 80]
+    # elif core_size == 'core_nano':
+    #     core_kwargs['decoder_depths'] = [2, 2, 8, 2]
+    #     core_kwargs['decoder_dims'] = [80, 160, 320, 640]
 
     elif core_size == 'core_tiny':
         core_kwargs['decoder_depths'] = [3, 3, 9, 3]
