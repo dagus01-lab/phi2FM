@@ -211,7 +211,9 @@ class TrainBase():
         return scheduler
 
     def get_loss(self, images, labels):
-        outputs = self.model(images)
+        outputs = self.model(images)  # assume model returns [B, num_classes]
+        if hasattr(outputs, 'output'):
+            outputs = outputs.output
         loss = self.criterion(outputs, labels)
         return loss
     
@@ -231,7 +233,9 @@ class TrainBase():
         
         
         else:            
-            outputs = self.model(images)
+            outputs = self.model(images)  # assume model returns [B, num_classes]
+            if hasattr(outputs, 'output'):
+                outputs = outputs.output
 
             assert outputs.shape == labels.shape, (
                 f"Shape mismatch in get_metrics:\n"
@@ -322,7 +326,9 @@ class TrainBase():
                 val_loss += loss.item()
 
                 # Collect predictions and labels
-                outputs = self.model(images)
+                outputs = self.model(images)  # assume model returns [B, num_classes]
+                if hasattr(outputs, 'output'):
+                    outputs = outputs.output
                 if isinstance(outputs, tuple):
                     outputs = outputs[0]
 
@@ -577,7 +583,9 @@ class TrainBase():
             self.inference_metrics = self.get_metrics(running_metric=running_metric, k=k)
 
             print(f"Inference Loss: {self.inference_metrics}")
-            outputs = self.model(images)
+            outputs = self.model(images)  # assume model returns [B, num_classes]
+            if hasattr(outputs, 'output'):
+                outputs = outputs.output
             self.val_visualize(images.detach().cpu().numpy(), labels.detach().cpu().numpy(),
                                outputs.detach().cpu().numpy(), name='inference')
 
@@ -659,8 +667,9 @@ class TrainGeoLocate(TrainBase):
         
         
         else:
-            outputs = self.model(images)
-            
+            outputs = self.model(images)  # assume model returns [B, num_classes]
+            if hasattr(outputs, 'output'):
+                outputs = outputs.output            
             # regression metrics
             error = outputs - labels
             squared_error = error ** 2
@@ -899,7 +908,9 @@ class TrainLandCover(TrainBase):
         return nn.CrossEntropyLoss()
 
     def get_loss(self, images, labels):
-        outputs = self.model(images)
+        outputs = self.model(images)  # assume model returns [B, num_classes]
+        if hasattr(outputs, 'output'):
+            outputs = outputs.output
         outputs = outputs.flatten(start_dim=2).squeeze()
         labels = labels.flatten(start_dim=1).squeeze()
         loss = self.criterion(outputs, labels)
@@ -1008,7 +1019,9 @@ class TrainLandCover(TrainBase):
 
         # Otherwise, compute the confusion matrix from model predictions
         else:
-            outputs = self.model(images)
+            outputs = self.model(images)  # assume model returns [B, num_classes]
+            if hasattr(outputs, 'output'):
+                outputs = outputs.output
             outputs = outputs.argmax(axis=1).flatten()
             labels = labels.squeeze().flatten()
 
@@ -1027,7 +1040,9 @@ class TrainClassificationBuildings(TrainBase):
         #                                                 3.12650858e-02, 7.95257252e-03, 4.86978615e-05]))
 
     def get_loss(self, images, labels):
-        outputs = self.model(images)
+        outputs = self.model(images)  # assume model returns [B, num_classes]
+        if hasattr(outputs, 'output'):
+            outputs = outputs.output
         loss = self.criterion(outputs, labels)
         return loss
 
@@ -1188,7 +1203,9 @@ class TrainClassificationBuildings(TrainBase):
         # ------------------------------------------------------------------
         else:
             # Model forward
-            outputs = self.model(images)  # shape: (batch_size, num_classes)
+            outputs = self.model(images)  # assume model returns [B, num_classes]
+            if hasattr(outputs, 'output'):
+                outputs = outputs.output  # shape: (batch_size, num_classes)
             # Convert logits to binary predictions
             threshold = 0.5
             pred = (outputs > threshold).int()  # (batch_size, num_classes)
@@ -1256,7 +1273,9 @@ class TrainSegmentationBurned(TrainBase):
         # 1) Forward pass → raw logits
         #print(images.shape)
          #print(outputs.shape)
-        outputs = self.model(images) #.output  # shape [B, 4, H, W]
+        outputs = self.model(images)  # assume model returns [B, num_classes]
+        if hasattr(outputs, 'output'):
+            outputs = outputs.output #.output  # shape [B, 4, H, W]
     
         # 2) Convert one-hot (or channel‑first mask) to integer indices [B, H, W]
         #    If your labels come in as one-hot: labels.shape == [B, 4, H, W]
@@ -1398,7 +1417,9 @@ class TrainSegmentationBurned(TrainBase):
 
         # Otherwise, compute the confusion matrix from model predictions
         else:
-            outputs = self.model(images)
+            outputs = self.model(images)  # assume model returns [B, num_classes]
+            if hasattr(outputs, 'output'):
+                outputs = outputs.output
             outputs = torch.argmax(outputs, dim=1).long()
             labels = torch.argmax(labels, dim=1).long()
             #outputs = outputs.argmax(axis=1).flatten()
@@ -1473,6 +1494,8 @@ class TrainClassificationFire(TrainClassificationBuildings):
         """
         # 1) Forward pass → raw logits of shape [B, num_classes]
         outputs = self.model(images)  # assume model returns [B, num_classes]
+        if hasattr(outputs, 'output'):
+            outputs = outputs.output
         #print(f"Ok: {images.shape}, {labels.shape}")
         #print(outputs)
         #print(labels)
@@ -1580,7 +1603,10 @@ class TrainClassificationFire(TrainClassificationBuildings):
             return np.zeros((num_classes, num_classes))
         elif (images is not None) and (labels is not None):
             self.model.eval()
-            outputs = self.model(images)
+            outputs = self.model(images)  # assume model returns [B, num_classes]
+            if hasattr(outputs, 'output'):
+                outputs = outputs.output
+            
             preds = torch.argmax(outputs, dim=1)
         
             num_classes = 4
@@ -1596,7 +1622,9 @@ class TrainClassificationFire(TrainClassificationBuildings):
         # CASE 3: COMPUTE BATCH CONFUSION MATRIX
         # ------------------------------------------------------------------
         else:
-            outputs = self.model(images)  # shape: (batch_size, num_classes)
+            outputs = self.model(images)  # assume model returns [B, num_classes]
+            if hasattr(outputs, 'output'):
+                outputs = outputs.output
             pred = torch.argmax(outputs, dim=1)  # (batch_size,)
             true = labels.long()                # (batch_size,)
     
