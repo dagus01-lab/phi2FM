@@ -477,8 +477,8 @@ def callback_decoder_burned_area(x, y):
     x = beo.channel_last_to_first(x)
     if y.ndim > 2:
         y = beo.channel_last_to_first(y)
-    # x = minmax_normalize_image(x) #normalize_image_burned_area(x)
-    x = terramind_scaling(x)
+    x = minmax_normalize_image(x) #normalize_image_burned_area(x)
+    # x = terramind_scaling(x)
     return torch.from_numpy(x), torch.from_numpy(y)
 
 def callback_decoder_clouds(x, y):
@@ -767,7 +767,7 @@ def load_data(dataset_path,
     # TODO: Why was the below line hard-coded to None? Shouldn't this correspond to input_size in the config?
     #  Otherwise, we would have always loaded full tiles, no?
     patch_size = None
-    if downstream_task == "clouds" or downstream_task == "worldfloods":
+    if downstream_task == "clouds" or downstream_task == "worldfloods" or downstream_task == "anomaly_detection":
         patch_size = (256, 256)
     
     if downstream_task == "clouds":
