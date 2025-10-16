@@ -862,7 +862,6 @@ def get_zarr_dataloader(
         assert len(split) == len(callback_pre_augmentation) == len(callback_post_augmentation) == len(augmentations) == len(n_shot), \
             "Mismatch in lengths of split subsets and callbacks"
 
-    # TODO: Remove hard-coded batch size.
     batch_size = batch_size
     dataset = PhiSatDataset(
         zarr_path=zarr_path,
