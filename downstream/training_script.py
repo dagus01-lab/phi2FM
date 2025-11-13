@@ -369,7 +369,7 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
         return model 
 
     elif model_name == 'SatMAE':
-        sd = torch.load(path_model_weights)
+        sd = torch.load(path_model_weights, weights_only=False)
         satmae_kwargs = get_core_decoder_kwargs(output_dim=output_channels, core_size='core_nano') ### 1024 * 3
         return satmae_vit_cnn(img_size=96, patch_size=8, in_chans=input_channels,
                               checkpoint=sd, freeze_body=freeze, classifier=False, **satmae_kwargs)
@@ -710,8 +710,10 @@ def main(experiment_name,
         }
 
         input_size_total = input_sizes.get(model_name, (batch_size, input_channels, input_size, input_size))
-        model_summary = summary(model, input_size=input_size_total, dtypes=[torch.float32])
-        #model_summary = None
+        try:
+            model_summary = summary(model, input_size=input_size_total, dtypes=[torch.float32])
+        except:
+            model_summary = None
 
         if model_device == 'cpu':
             model.to(model_device)
@@ -1019,10 +1021,10 @@ if __name__ == "__main__":
 
     for n_shot in n_shot_list:
         args.n_shot = n_shot
-        for freeze_pretrained in [False, True]:
+        for freeze_pretrained in [False]:
         #for freeze_pretrained in [True]:
             args.freeze_pretrained = freeze_pretrained
-            if freeze_pretrained:
+            if freeze_pretrained: 
                 prefix="finetuning/"
             else:
                 prefix="lp/"

@@ -50,3 +50,5 @@ simulation_aux_files/
 *.zip
 *.pkl
 wandb/
+
+extracted_samples/

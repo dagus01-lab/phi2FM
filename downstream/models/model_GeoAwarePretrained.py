@@ -292,15 +292,18 @@ def get_core_encoder_kwargs(output_dim, input_dim, core_size, full_unet=True, **
     core_kwargs = {'input_dim':input_dim, 'output_dim':output_dim, 'norm':'batch', 'padding':'same', 'activation':'relu'}
 
     if core_size=='core_nano':
-        core_kwargs['depths']=[2, 2, 2, 2] if full_unet else [2, 2, 8, 2]
+        core_kwargs['encoder_depths'] = [2, 2, 8, 2]
+        core_kwargs['decoder_depths'] = [2, 2, 2, 2] if full_unet else [2, 2, 8, 2]
         core_kwargs['dims']=[80, 160, 320, 640]
 
     elif core_size=='core_tiny':
-        core_kwargs['depths']=[3, 3, 9, 3]
+        core_kwargs['encoder_depths']=[3, 3, 9, 3]
+        core_kwargs['decoder_depths'] = [3, 3, 3, 3] if full_unet else [3, 3, 9, 3]
         core_kwargs['dims']=[96, 192, 384, 768]
 
     elif core_size=='core_base':
-        core_kwargs['depths']=[3, 3, 27, 3]
+        core_kwargs['encoder_depths']=[3, 3, 27, 3]
+        core_kwargs['decoder_depths'] = [3, 3, 3, 3] if full_unet else [3, 3, 27, 3]
         core_kwargs['dims']=[128, 256, 512, 1024]
 
     else:

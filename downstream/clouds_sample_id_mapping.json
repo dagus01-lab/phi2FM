@@ -1,0 +1,267 @@
+{
+  "total_files": 52,
+  "files_with_zarr_ids": 52,
+  "files_without_zarr_ids": 0,
+  "mapping": {
+    "clouds_sample_15584.png": {
+      "file_index": 15584,
+      "zarr_sample_id": "06954",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_15584.png"
+    },
+    "clouds_sample_11688.png": {
+      "file_index": 11688,
+      "zarr_sample_id": "03570",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_11688.png"
+    },
+    "clouds_sample_75972.png": {
+      "file_index": 75972,
+      "zarr_sample_id": "00528",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_75972.png"
+    },
+    "clouds_sample_19480.png": {
+      "file_index": 19480,
+      "zarr_sample_id": "08926",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_19480.png"
+    },
+    "clouds_sample_97400.png": {
+      "file_index": 97400,
+      "zarr_sample_id": "06161",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_97400.png"
+    },
+    "clouds_sample_68180.png": {
+      "file_index": 68180,
+      "zarr_sample_id": "03263",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_68180.png"
+    },
+    "clouds_sample_91556.png": {
+      "file_index": 91556,
+      "zarr_sample_id": "01767",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_91556.png"
+    },
+    "clouds_sample_33116.png": {
+      "file_index": 33116,
+      "zarr_sample_id": "03097",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_33116.png"
+    },
+    "clouds_sample_77920.png": {
+      "file_index": 77920,
+      "zarr_sample_id": "06119",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_77920.png"
+    },
+    "clouds_sample_03896.png": {
+      "file_index": 3896,
+      "zarr_sample_id": "08933",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_03896.png"
+    },
+    "clouds_sample_50648.png": {
+      "file_index": 50648,
+      "zarr_sample_id": "03168",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_50648.png"
+    },
+    "clouds_sample_81816.png": {
+      "file_index": 81816,
+      "zarr_sample_id": "09174",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_81816.png"
+    },
+    "clouds_sample_21428.png": {
+      "file_index": 21428,
+      "zarr_sample_id": "08066",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_21428.png"
+    },
+    "clouds_sample_83764.png": {
+      "file_index": 83764,
+      "zarr_sample_id": "07178",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_83764.png"
+    },
+    "clouds_sample_87660.png": {
+      "file_index": 87660,
+      "zarr_sample_id": "01143",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_87660.png"
+    },
+    "clouds_sample_01948.png": {
+      "file_index": 1948,
+      "zarr_sample_id": "04223",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_01948.png"
+    },
+    "clouds_sample_93504.png": {
+      "file_index": 93504,
+      "zarr_sample_id": "06350",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_93504.png"
+    },
+    "clouds_sample_54544.png": {
+      "file_index": 54544,
+      "zarr_sample_id": "07293",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_54544.png"
+    },
+    "clouds_sample_38960.png": {
+      "file_index": 38960,
+      "zarr_sample_id": "09692",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_38960.png"
+    },
+    "clouds_sample_58440.png": {
+      "file_index": 58440,
+      "zarr_sample_id": "04957",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_58440.png"
+    },
+    "clouds_sample_42856.png": {
+      "file_index": 42856,
+      "zarr_sample_id": "01178",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_42856.png"
+    },
+    "clouds_sample_74024.png": {
+      "file_index": 74024,
+      "zarr_sample_id": "08252",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_74024.png"
+    },
+    "clouds_sample_48700.png": {
+      "file_index": 48700,
+      "zarr_sample_id": "06841",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_48700.png"
+    },
+    "clouds_sample_66232.png": {
+      "file_index": 66232,
+      "zarr_sample_id": "02913",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_66232.png"
+    },
+    "clouds_sample_35064.png": {
+      "file_index": 35064,
+      "zarr_sample_id": "06749",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_35064.png"
+    },
+    "clouds_sample_37012.png": {
+      "file_index": 37012,
+      "zarr_sample_id": "07330",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_37012.png"
+    },
+    "clouds_sample_25324.png": {
+      "file_index": 25324,
+      "zarr_sample_id": "01183",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_25324.png"
+    },
+    "clouds_sample_00000.png": {
+      "file_index": 0,
+      "zarr_sample_id": "09068",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_00000.png"
+    },
+    "clouds_sample_07792.png": {
+      "file_index": 7792,
+      "zarr_sample_id": "06223",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_07792.png"
+    },
+    "clouds_sample_44804.png": {
+      "file_index": 44804,
+      "zarr_sample_id": "01605",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_44804.png"
+    },
+    "clouds_sample_56492.png": {
+      "file_index": 56492,
+      "zarr_sample_id": "06688",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_56492.png"
+    },
+    "clouds_sample_79868.png": {
+      "file_index": 79868,
+      "zarr_sample_id": "02132",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_79868.png"
+    },
+    "clouds_sample_09740.png": {
+      "file_index": 9740,
+      "zarr_sample_id": "03434",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_09740.png"
+    },
+    "clouds_sample_99348.png": {
+      "file_index": 99348,
+      "zarr_sample_id": "02447",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_99348.png"
+    },
+    "clouds_sample_27272.png": {
+      "file_index": 27272,
+      "zarr_sample_id": "01799",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_27272.png"
+    },
+    "clouds_sample_17532.png": {
+      "file_index": 17532,
+      "zarr_sample_id": "06369",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_17532.png"
+    },
+    "clouds_sample_29220.png": {
+      "file_index": 29220,
+      "zarr_sample_id": "02587",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_29220.png"
+    },
+    "clouds_sample_62336.png": {
+      "file_index": 62336,
+      "zarr_sample_id": "04540",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_62336.png"
+    },
+    "clouds_sample_95452.png": {
+      "file_index": 95452,
+      "zarr_sample_id": "01760",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_95452.png"
+    },
+    "clouds_sample_31168.png": {
+      "file_index": 31168,
+      "zarr_sample_id": "08336",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_31168.png"
+    },
+    "clouds_sample_46752.png": {
+      "file_index": 46752,
+      "zarr_sample_id": "03863",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_46752.png"
+    },
+    "clouds_sample_64284.png": {
+      "file_index": 64284,
+      "zarr_sample_id": "04124",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_64284.png"
+    },
+    "clouds_sample_72076.png": {
+      "file_index": 72076,
+      "zarr_sample_id": "03167",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_72076.png"
+    },
+    "clouds_sample_70128.png": {
+      "file_index": 70128,
+      "zarr_sample_id": "04205",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_70128.png"
+    },
+    "clouds_sample_89608.png": {
+      "file_index": 89608,
+      "zarr_sample_id": "01983",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_89608.png"
+    },
+    "clouds_sample_52596.png": {
+      "file_index": 52596,
+      "zarr_sample_id": "01519",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_52596.png"
+    },
+    "clouds_sample_13636.png": {
+      "file_index": 13636,
+      "zarr_sample_id": "07403",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_13636.png"
+    },
+    "clouds_sample_40908.png": {
+      "file_index": 40908,
+      "zarr_sample_id": "03880",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_40908.png"
+    },
+    "clouds_sample_05844.png": {
+      "file_index": 5844,
+      "zarr_sample_id": "07733",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_05844.png"
+    },
+    "clouds_sample_23376.png": {
+      "file_index": 23376,
+      "zarr_sample_id": "02503",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_23376.png"
+    },
+    "clouds_sample_85712.png": {
+      "file_index": 85712,
+      "zarr_sample_id": "06980",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_85712.png"
+    },
+    "clouds_sample_60388.png": {
+      "file_index": 60388,
+      "zarr_sample_id": "04228",
+      "file_path": "extracted_samples/clouds/img/clouds_sample_60388.png"
+    }
+  }
+}

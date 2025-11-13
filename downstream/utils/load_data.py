@@ -574,6 +574,7 @@ def callback_decoder_prithvi_fire(x, y):
     x, y =  callback_decoder_prithvi(x, y)
     x = x[:, 10:-10, 10:-10]
     return x, y
+    
 def callback_decoder_prithvi_clouds(x, y):
     #x_norm = (x-CLOUDS_MEAN)/CLOUDS_STD
     print(f"X shape before padding: {x.shape}")
@@ -793,13 +794,19 @@ def load_data(dataset_path,
             num_classes=num_classes, 
             n_shot=[n, 0, 0], 
             weights_dir=weights_dir, 
-            patch_size=patch_size
+            patch_size=patch_size, 
+            label_mapping={0:0, 1:0, 2:0, 3:0, 4:1}
         )
 
         dl_inference = dl_test
     
     else:
         # import pdb; pdb.set_trace()
+        # Set label_mapping for landcover task to remap classes 10,20,...,100 to 0,1,...,10
+        label_mapping_param = None
+        if downstream_task == 'lc':
+            label_mapping_param = LC_MAP  # {10:0, 20:1, 30:2, 40:3, 50:4, 60:5, 70:6, 80:7, 90:8, 95:9, 100:10}
+        
         weight, pos_weight, dl_train, dl_val = get_zarr_dataloader(
             zarr_path=dataset_path,                     # Path to the Zarr archive
             dataset_set="trainval",                 # Dataset subset to use
@@ -824,6 +831,7 @@ def load_data(dataset_path,
             weights_dir=weights_dir, 
             patch_size=patch_size,
             shrink_val_set=shrink_val_set,
+            label_mapping=label_mapping_param,
         )
 
         _, _, dl_test = get_zarr_dataloader(
@@ -847,7 +855,8 @@ def load_data(dataset_path,
             num_classes=num_classes,
             n_shot=0,
             weights_dir=None,
-            patch_size=patch_size
+            patch_size=patch_size,
+            label_mapping=label_mapping_param,
         )
         dl_inference = dl_test
 

@@ -85,7 +85,7 @@ class AugmentationMirrorXY:
 
         return img.copy(), label.copy()
 class AugmentationNoiseNormal:
-    def __init__(self, p=0.5, std=0.05, inplace=False):
+    def __init__(self, p=0.15, std=0.02, inplace=False):
         self.p = p
         self.std = std
         self.inplace = inplace
@@ -117,7 +117,8 @@ class PhiSatDataset(Dataset):
         patch_size: Optional[Tuple[int, int]] = None, 
         weights_dir: str = None,
         n_regions: int = 6, 
-        n_shot_strategy: str = 'stratified'
+        n_shot_strategy: str = 'stratified', 
+        label_mapping: Dict = None
     ):
         # Open Zarr and set basic attributes
         self.root = zarr.open(zarr_path, mode='r')
@@ -135,6 +136,7 @@ class PhiSatDataset(Dataset):
         self.weights_dir = weights_dir
         self.n_regions = n_regions
         self.n_shot_strategy = n_shot_strategy
+        self.label_mapping = label_mapping
 
         # Access the dataset group
         if self.dataset_set not in self.root:
@@ -215,7 +217,7 @@ class PhiSatDataset(Dataset):
         #label = self._load_label_array(sample_group['label'])
 
         img = self._load_zarr_array(sample_group['img'], y, x)
-        label = self._load_zarr_array(sample_group['label'], y, x)
+        label = self._load_zarr_array(sample_group['label'], y, x, map_labels=True)
         # print(f"Before preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
         img, label = self._preprocess(img, label, y, x)
         # print(f"After preprocessing ({sid}, {y}, {x}): img_shape={img.shape}, label_shape={label.shape}")
@@ -234,16 +236,16 @@ class PhiSatDataset(Dataset):
             return patch  # (sid, y, x)
         else:
             return patch, 0, 0
-    def _load_zarr_array(self, ds, y: int = 0, x: int = 0) -> np.ndarray:
+    def _load_zarr_array(self, ds, y: int = 0, x: int = 0, map_labels: bool = False) -> np.ndarray:
         """
         Read either a full array or a patch from Zarr and always return
         a 3D ndarray in (C, H, W) format with C>0.
         """
+
         # 1) Scalar → 1×1×1
         if ds.shape == ():
-            v = np.array(ds[()])
-            return v #.reshape((1, 1, 1))
-
+            arr = np.array(ds[()])
+            
         # 2) Patch logic
         if self.patch_size:
             ph, pw = self.patch_size
@@ -283,6 +285,7 @@ class PhiSatDataset(Dataset):
         #print(f"{ds.name}: {ds.shape}")
         #print(f"{ds.name}: {arr.shape}")
         arr = self._transpose_if_needed(arr)
+        
         #print(f"{ds.name}: {arr.shape}")
         return np.array(arr)
 
@@ -446,28 +449,53 @@ class PhiSatDataset(Dataset):
     
     def _preprocess(self, img: np.ndarray, label: np.ndarray, y: int, x: int):
 
-        # Squeeze single-channel masks to one-hot
-        
+        # Squeeze single-channel masks. For discrete (integer) labels we convert to
+        # one-hot; for floating-point labels (regression) we keep the raw values.
         if label.ndim == 3 and label.shape[-1] == 1:
-            lab = torch.from_numpy(label.squeeze(-1)).long()
-            #print(self.num_classes)
-            #print(lab.shape)
-            #label = F.one_hot(lab, num_classes=self.num_classes).numpy()
-            try:
-                label = F.one_hot(lab, num_classes=self.num_classes).numpy()
-            except RuntimeError as e:
-                print("RuntimeError during one-hot encoding:", e)
-                print("Unique label values found:", torch.unique(lab))
-                
-                # Optional: print out specific problematic indices
-                invalid_mask = (lab >= self.num_classes) | (lab < 0)
-                if invalid_mask.any():
-                    invalid_indices = torch.nonzero(invalid_mask, as_tuple=False)
-                    print(f"Invalid class values (not in [0, {self.num_classes - 1}]):")
-                    for idx in invalid_indices:
-                        print(f"   At position {tuple(idx.tolist())} -> value: {lab[tuple(idx.tolist())].item()}")
-                raise  # Re-raise to let the calling code handle or crash as needed            
-
+            # If label dtype is floating, assume regression and do NOT one-hot encode
+            if np.issubdtype(label.dtype, np.floating):
+                # Keep as [H, W] float array
+                label = label.squeeze(-1)
+            else:
+                lab = torch.from_numpy(label.squeeze(-1)).long()
+                #print(self.num_classes)
+                #print(lab.shape)
+                #label = F.one_hot(lab, num_classes=self.num_classes).numpy()
+                try:
+                    label = F.one_hot(lab, num_classes=self.num_classes).numpy()
+                except RuntimeError as e:
+                    print("RuntimeError during one-hot encoding:", e)
+                    print("Unique label values found:", torch.unique(lab))
+                    
+                    # Optional: print out specific problematic indices
+                    invalid_mask = (lab >= self.num_classes) | (lab < 0)
+                    if invalid_mask.any():
+                        invalid_indices = torch.nonzero(invalid_mask, as_tuple=False)
+                        print(f"Invalid class values (not in [0, {self.num_classes - 1}]):")
+                        for idx in invalid_indices:
+                            print(f"   At position {tuple(idx.tolist())} -> value: {lab[tuple(idx.tolist())].item()}")
+                    raise  # Re-raise to let the calling code handle or crash as needed
+        
+        # Apply label mapping if specified (for aggregating classes in one-hot encoded labels)
+        if self.label_mapping is not None:
+            # label is now one-hot encoded with shape [H, W, num_classes]
+            # We need to remap classes according to label_mapping
+            # Example: {0:0, 1:0, 2:0, 3:0, 4:1} merges classes 0-3 to 0, and 4 to 1
+            
+            # Find the number of output classes after mapping
+            num_output_classes = len(set(self.label_mapping.values()))
+            
+            # Create new one-hot array with remapped classes
+            h, w, _ = label.shape
+            new_label = np.zeros((h, w, num_output_classes), dtype=label.dtype)
+            
+            # For each old class, add its probability to the new class
+            for old_class, new_class in self.label_mapping.items():
+                if old_class < label.shape[2]:  # Check if old_class exists in current one-hot
+                    new_label[:, :, new_class] += label[:, :, old_class]
+            
+            label = new_label
+        
         # Optional image cropping
         if self.crop_images:
             img = img[:64, :64, ...]
@@ -637,25 +665,51 @@ class PhiSatDataset(Dataset):
 
             subsets = [predefined[name] for name in split_names]
         else:
-            # Fallback: generate splits randomly, stratified by class
-            class_to_ids: Dict[int, List] = {c: [] for c in range(self.num_classes)}
-            for sid in self.sample_ids:
+            # Check if this is a regression task by examining a few labels
+            is_regression = False
+            test_samples = self.sample_ids[:min(5, len(self.sample_ids))]
+            for sid in test_samples:
                 lbl = self._load_zarr_array(self.dataset_group[sid]['label'])
-                cls = self._infer_class_from_label(lbl)
-                if cls is not None:
-                    class_to_ids[cls].append(sid)
-
-            subsets = [[] for _ in split]
-            for cls, ids in class_to_ids.items():
+                if np.issubdtype(lbl.dtype, np.floating):
+                    is_regression = True
+                    break
+            
+            if is_regression:
+                # For regression tasks, do simple random splitting (no stratification)
+                print("Detected regression task - using random splitting instead of stratified")
                 rng = random.Random(0)
-                rng.shuffle(ids)
-                n = len(ids)
+                shuffled_ids = list(self.sample_ids)
+                rng.shuffle(shuffled_ids)
+                
+                n = len(shuffled_ids)
                 sizes = [int(r * n) for r in split]
-                sizes[-1] = n - sum(sizes[:-1])
+                sizes[-1] = n - sum(sizes[:-1])  # Adjust last size for any rounding
+                
+                subsets = []
                 start = 0
-                for i, size in enumerate(sizes):
-                    subsets[i].extend(ids[start:start+size])
+                for size in sizes:
+                    subsets.append(shuffled_ids[start:start+size])
                     start += size
+            else:
+                # Fallback: generate splits randomly, stratified by class
+                class_to_ids: Dict[int, List] = {c: [] for c in range(self.num_classes)}
+                for sid in self.sample_ids:
+                    lbl = self._load_zarr_array(self.dataset_group[sid]['label'])
+                    cls = self._infer_class_from_label(lbl)
+                    if cls is not None:
+                        class_to_ids[cls].append(sid)
+
+                subsets = [[] for _ in split]
+                for cls, ids in class_to_ids.items():
+                    rng = random.Random(0)
+                    rng.shuffle(ids)
+                    n = len(ids)
+                    sizes = [int(r * n) for r in split]
+                    sizes[-1] = n - sum(sizes[:-1])
+                    start = 0
+                    for i, size in enumerate(sizes):
+                        subsets[i].extend(ids[start:start+size])
+                        start += size
 
             # Save these new splits to JSON
             for name, ids in zip(split_names, subsets):
@@ -702,27 +756,48 @@ class PhiSatDataset(Dataset):
             print("Not enough patches for n_shot sampling")
         
         rng = random.Random(seed)
-        class_to_patches: Dict[int, List] = {c: [] for c in range(self.num_classes)}
-        for patch in self.patches:
+        
+        # Check if this is a regression task by examining a few labels
+        is_regression = False
+        test_patches = self.patches[:min(3, len(self.patches))]
+        for patch in test_patches:
             sid, y, x = self._unpack_patch(patch)
             lbl = self._load_zarr_array(self.dataset_group[sid]['label'])
             if self.patch_size:
                 ph, pw = self.patch_size
                 lbl = lbl[y:y+ph, x:x+pw, ...] if lbl.ndim >= 2 else lbl
-            cls = self._infer_class_from_label(lbl)
-            if cls is not None:
-                class_to_patches[cls].append(patch)
+            if np.issubdtype(lbl.dtype, np.floating):
+                is_regression = True
+                break
+        
+        if is_regression:
+            # For regression tasks, do simple random sampling
+            print(f"Detected regression task - using random sampling for n_shot={self.n_shot}")
+            selected = rng.sample(self.patches, min(self.n_shot, len(self.patches)))
+            self.patches = selected
+        else:
+            # For classification tasks, use stratified sampling
+            class_to_patches: Dict[int, List] = {c: [] for c in range(self.num_classes)}
+            for patch in self.patches:
+                sid, y, x = self._unpack_patch(patch)
+                lbl = self._load_zarr_array(self.dataset_group[sid]['label'])
+                if self.patch_size:
+                    ph, pw = self.patch_size
+                    lbl = lbl[y:y+ph, x:x+pw, ...] if lbl.ndim >= 2 else lbl
+                cls = self._infer_class_from_label(lbl)
+                if cls is not None:
+                    class_to_patches[cls].append(patch)
 
-        total = sum(len(v) for v in class_to_patches.values())
-        selected: List[Union[str, Tuple[str,int,int]]] = []
-        for cls, plist in class_to_patches.items():
-            k = int(round((len(plist)/total) * self.n_shot))
-            k = min(k, len(plist))
-            selected.extend(rng.sample(plist, k))
-        if len(selected) < self.n_shot:
-            leftovers = [p for p in self.patches if p not in selected]
-            selected.extend(rng.sample(leftovers, self.n_shot - len(selected)))
-        self.patches = selected[:self.n_shot]
+            total = sum(len(v) for v in class_to_patches.values())
+            selected: List[Union[str, Tuple[str,int,int]]] = []
+            for cls, plist in class_to_patches.items():
+                k = int(round((len(plist)/total) * self.n_shot))
+                k = min(k, len(plist))
+                selected.extend(rng.sample(plist, k))
+            if len(selected) < self.n_shot:
+                leftovers = [p for p in self.patches if p not in selected]
+                selected.extend(rng.sample(leftovers, self.n_shot - len(selected)))
+            self.patches = selected[:self.n_shot]
         
 def collate_fn(batch: List[Dict]) -> (torch.Tensor, torch.Tensor):
     """
@@ -835,7 +910,7 @@ def get_zarr_dataloader(
     split_names: List[str] = None, 
     patch_size: Tuple[int, int] = None,
     shrink_val_set: float = 1.0,
-    
+    label_mapping: Dict = None
 ) -> DataLoader:
     """
     Create a DataLoader for Zarr dataset.
@@ -876,7 +951,8 @@ def get_zarr_dataloader(
         patch_size=patch_size,
         weights_dir=weights_dir, 
         n_regions=n_regions, 
-        n_shot_strategy='stratified'
+        n_shot_strategy='stratified', 
+        label_mapping=label_mapping,
     )
     img, label = dataset[0]['img'], dataset[0]['label']
     print(f"Dataset {dataset_set} shapes: img={img.shape}, label={label.shape}")

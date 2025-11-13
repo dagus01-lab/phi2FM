@@ -13,7 +13,7 @@ def CoreUnet_atto(**kwargs):
     Params size (MB): 15.81
     Estimated Total Size (MB): 1622.13
     """
-    model = CoreUnet(depths=[2, 2, 6, 2], dims=[40, 80, 160, 320], **kwargs)
+    model = CoreUnet(encoder_depths=[2, 2, 6, 2], decoder_depths=[2, 2, 6, 2], dims=[40, 80, 160, 320], **kwargs)
     return model
 
 def CoreUnet_femto(**kwargs):
@@ -28,7 +28,7 @@ def CoreUnet_femto(**kwargs):
     Params size (MB): 22.74
     Estimated Total Size (MB): 1948.78
     """
-    model = CoreUnet(depths=[2, 2, 6, 2], dims=[48, 96, 192, 384], **kwargs)
+    model = CoreUnet(encoder_depths=[2, 2, 6, 2], decoder_depths=[2, 2, 6, 2], dims=[48, 96, 192, 384], **kwargs)
     return model
 
 def CoreUnet_pico(**kwargs):
@@ -43,7 +43,7 @@ def CoreUnet_pico(**kwargs):
     Params size (MB): 40.35
     Estimated Total Size (MB): 2605.84
     """
-    model = CoreUnet(depths=[2, 2, 6, 2], dims=[64, 128, 256, 512], **kwargs)
+    model = CoreUnet(encoder_depths=[2, 2, 6, 2], decoder_depths=[2, 2, 6, 2], dims=[64, 128, 256, 512], **kwargs)
     return model
 
 def CoreUnet_nano(**kwargs):
@@ -58,7 +58,7 @@ def CoreUnet_nano(**kwargs):
     Params size (MB): 65.60
     Estimated Total Size (MB): 3459.42
     """
-    model = CoreUnet(depths=[2, 2, 8, 2], dims=[80*2, 160*2, 320*2, 640*2], **kwargs)
+    model = CoreUnet(encoder_depths=[2, 2, 8, 2], decoder_depths=[2, 2, 8, 2], dims=[80*2, 160*2, 320*2, 640*2], **kwargs)
     return model
 
 def CoreUnet_tiny(**kwargs):
@@ -73,7 +73,7 @@ def CoreUnet_tiny(**kwargs):
     Params size (MB): 104.46
     Estimated Total Size (MB): 5176.15
     """
-    model = CoreUnet(depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
+    model = CoreUnet(encoder_depths=[3, 3, 9, 3], decoder_depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], **kwargs)
     return model
 
 def CoreUnet_base(**kwargs):
@@ -88,7 +88,7 @@ def CoreUnet_base(**kwargs):
     Params size (MB): 245.72
     Estimated Total Size (MB): 9725.20
     """
-    model = CoreUnet(depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
+    model = CoreUnet(encoder_depths=[3, 3, 27, 3], decoder_depths=[3, 3, 27, 3], dims=[128, 256, 512, 1024], **kwargs)
     return model
 
 def CoreUnet_large(**kwargs):
@@ -103,7 +103,7 @@ def CoreUnet_large(**kwargs):
     Params size (MB): 552.04
     Estimated Total Size (MB): 14767.42
     """
-    model = CoreUnet(depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
+    model = CoreUnet(encoder_depths=[3, 3, 27, 3], decoder_depths=[3, 3, 27, 3], dims=[192, 384, 768, 1536], **kwargs)
     return model
 
 def CoreUnet_huge(**kwargs):
@@ -118,7 +118,7 @@ def CoreUnet_huge(**kwargs):
     Params size (MB): 1852.94
     Estimated Total Size (MB): 27908.06
     """
-    model = CoreUnet(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
+    model = CoreUnet(encoder_depths=[3, 3, 27, 3], decoder_depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
     return model
 
 def Core_atto(**kwargs):

@@ -1651,8 +1651,8 @@ class TrainCloudSegmentation(TrainSegmentationBurned):
             y_pred=outputs_labels.cpu().numpy(),
             images=5,
             channel_first=True,
-            num_classes=5,
-            labels=['No cloud', 'Cloud', 'value2', 'value3', 'value4'],
+            num_classes=2,
+            labels=['No cloud', 'Cloud'],
             save_path=f"{self.out_folder}/{name}.png"
         )
             

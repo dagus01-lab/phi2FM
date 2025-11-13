@@ -171,7 +171,8 @@ class CoreUnet(nn.Module):
     def __init__(self, *,
         input_dim=10,
         output_dim=1,
-        depths=None,
+        encoder_depths=None,
+        decoder_depths=None, 
         dims=None,
         activation="relu",
         norm="batch",
@@ -179,7 +180,8 @@ class CoreUnet(nn.Module):
     ):
         super(CoreUnet, self).__init__()
 
-        self.depths = [3, 3, 9, 3] if depths is None else depths
+        self.encoder_depths = [3, 3, 9, 3] if encoder_depths is None else encoder_depths
+        self.decoder_depths = [3, 3, 9, 3] if decoder_depths is None else decoder_depths
         self.dims = [96, 192, 384, 768] if dims is None else dims
         self.output_dim = output_dim
         self.input_dim = input_dim
@@ -189,16 +191,17 @@ class CoreUnet(nn.Module):
 
         self.dims = [v // 2 for v in self.dims]
 
-        assert len(self.depths) == len(self.dims), "depths and dims must have the same length."
+        assert len(self.encoder_depths) == len(self.dims), "depths and dims must have the same length."
+        assert len(self.decoder_depths) == len(self.dims), "depths and dims must have the same length."
 
         self.stem = nn.Sequential(
             CoreCNNBlock(self.input_dim, self.dims[0], norm=self.norm, activation=self.activation, padding=self.padding),
         )
 
         self.encoder_blocks = []
-        for i in range(len(self.depths)):
+        for i in range(len(self.encoder_depths)):
             encoder_block = CoreEncoderBlock(
-                self.depths[i],
+                self.encoder_depths[i],
                 self.dims[i - 1] if i > 0 else self.dims[0],
                 self.dims[i],
                 norm=self.norm,
@@ -213,7 +216,7 @@ class CoreUnet(nn.Module):
 
         for i in reversed(range(len(self.encoder_blocks))):
             decoder_block = CoreDecoderBlock(
-                self.depths[i],
+                self.decoder_depths[i],
                 self.dims[i],
                 self.dims[i - 1] if i > 0 else self.dims[0],
                 norm=self.norm,
@@ -488,7 +491,8 @@ if __name__ == "__main__":
     model = CoreUnet(
         input_dim=10,
         output_dim=1,
-        depths=[2, 2, 8, 2],
+        encoder_depths=[2, 2, 8, 2],
+        decoder_depths=[2, 2, 8, 2],
         dims=[80, 160, 320, 640]
     )
     

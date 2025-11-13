@@ -3,17 +3,16 @@
 # Define the list of configuration files
 
 configs=(
-    "args/finetune_FMs/worldfloods/geoaware.yml"
-    #"args/finetune_FMs/worldfloods/moco.yml"
     #"args/finetune_FMs/worldfloods/phisatnet.yml"
+    #"args/finetune_FMs/worldfloods/geoaware.yml"
+    #"args/finetune_FMs/worldfloods/moco.yml"
     #"args/finetune_FMs/worldfloods/dino.yml"
     #"args/finetune_FMs/worldfloods/seco.yml"
-    #"args/finetune_FMs/worldfloods/uniphi.yml"
     #"args/finetune_FMs/worldfloods/gassl.yml"
     #"args/finetune_FMs/worldfloods/caco.yml"
-    #"args/finetune_FMs/worldfloods/vit.yml"
-    "args/finetune_FMs/worldfloods/prithvi.yml"
+    #"args/finetune_FMs/worldfloods/prithvi.yml"
     #"args/finetune_FMs/worldfloods/satmae.yml"
+    "args/finetune_FMs/worldfloods/terramind_cluster.yml"
 )
 
 # Loop through each config file and execute the training script sequentially
