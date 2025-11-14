@@ -1038,7 +1038,7 @@ if __name__ == "__main__":
 
     for n_shot in n_shot_list:
         args.n_shot = n_shot
-        for freeze_pretrained in [True, False]:
+        for freeze_pretrained in [False, True]:
             args.freeze_pretrained = freeze_pretrained
             if args.freeze_pretrained: 
                 prefix="lp/"

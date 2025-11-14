@@ -132,9 +132,16 @@ class UNet_Myriad2_Downstream(nn.Module):
         
         # Task-specific head
         if self.task == 'classification':
-            # Classification: Global pooling + linear classifier
+            # Classification: Global pooling + MLP classifier
+            # Use features from the bottleneck (deepest layer) instead of decoder output
             self.global_pool = nn.AdaptiveAvgPool2d(1)
-            self.classifier = nn.Linear(self.channels[0], output_dim)
+            self.classifier = nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(self.channels[-1], self.channels[-1] // 2),
+                nn.ReLU(inplace=True),
+                nn.Dropout(0.2),
+                nn.Linear(self.channels[-1] // 2, output_dim)
+            )
         else:
             # Segmentation: Pixel-wise classification
             self.classifier = nn.Conv2d(self.channels[0], output_dim, kernel_size=1)
@@ -218,23 +225,23 @@ class UNet_Myriad2_Downstream(nn.Module):
         
         # Bottleneck
         current = self.pools[-1](current)
-        current = self.bottleneck(current)
+        bottleneck_features = self.bottleneck(current)
         
-        # Decoder path
-        for i in range(self.depth):
-            current = self.upsamplers[i](current)
-            skip_connection = encoder_outputs[self.depth - 1 - i]
-            current = torch.cat([current, skip_connection], dim=1)
-            current = self.decoders[i](current)
-        
-        # Task-specific head
+        # Task-specific processing
         if self.task == 'classification':
-            # Global pooling + linear classifier
-            current = self.global_pool(current)  # [B, C, 1, 1]
-            current = current.flatten(1)  # [B, C]
-            out = self.classifier(current)  # [B, num_classes]
+            # Classification: Use bottleneck features directly
+            pooled = self.global_pool(bottleneck_features)  # [B, C, 1, 1]
+            out = self.classifier(pooled)  # [B, num_classes]
         else:
-            # Segmentation: pixel-wise classification
+            # Segmentation: Decoder path
+            current = bottleneck_features
+            for i in range(self.depth):
+                current = self.upsamplers[i](current)
+                skip_connection = encoder_outputs[self.depth - 1 - i]
+                current = torch.cat([current, skip_connection], dim=1)
+                current = self.decoders[i](current)
+            
+            # Pixel-wise classification
             out = self.classifier(current)  # [B, num_classes, H, W]
         
         return out
@@ -244,12 +251,17 @@ class UNet_Myriad2_Downstream(nn.Module):
         total_params = sum(p.numel() for p in self.parameters())
         trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         
+        # Get classifier parameters
+        classifier_params = sum(p.numel() for p in self.classifier.parameters())
+        
         return {
             'task': self.task,
             'depth': self.depth,
             'channels_per_level': self.channels,
             'channel_multipliers': self.channel_multipliers,
+            'uses_decoder': self.task == 'segmentation',
             'total_parameters': total_params,
             'trainable_parameters': trainable_params,
+            'classifier_parameters': classifier_params,
             'model_size_mb': sum(p.numel() * p.element_size() for p in self.parameters()) / 1024**2
         }

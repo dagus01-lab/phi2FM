@@ -554,8 +554,11 @@ class TrainBase():
 
             print(f"Test Loss: {self.test_metrics}")
             outputs = self.model(images)
-            self.val_visualize(images.detach().cpu().numpy(), labels.detach().cpu().numpy(),
-                               outputs.detach().cpu().numpy(), name='test')
+            try: 
+                self.val_visualize(images.detach().cpu().numpy(), labels.detach().cpu().numpy(),
+                                   outputs.detach().cpu().numpy(), name='test')
+            except Exception as e:
+                print(f"Visualization error during testing: {e}")
 
         if isinstance(self.model, nn.DataParallel):
             model_sd = self.model.module.state_dict().copy()
