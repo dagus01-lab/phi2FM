@@ -9,7 +9,6 @@ from pathlib import Path
 
 # PBS template
 PBS_TEMPLATE = """#!/bin/bash
-#PBS -P 1001
 #PBS -N {job_name}
 #PBS -q {queue}
 #PBS -l walltime={walltime}

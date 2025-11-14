@@ -1,5 +1,4 @@
 #!/bin/bash
-#PBS -P 1001
 #PBS -N RD_moco_n5000_f
 #PBS -q gpu4_dbg
 #PBS -l walltime=00:05:00
