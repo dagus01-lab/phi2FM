@@ -17,7 +17,7 @@ PBS_TEMPLATE = """#!/bin/bash
 source /lustre/projects/1001/miniconda3/bin/activate
 conda activate esa-phisatnet
 
-cd /lustre/projects/1001/gdaga/home/phi2FM
+cd /lustre/projects/1001/gdaga/home/phi2FM/downstream
 export PYTHONPATH=$PYTHONPATH:/lustre/projects/1001/gdaga/home/phi2FM
 python training_script.py -r "args/lustre_expanded/{task}/{config_file}"
 """
