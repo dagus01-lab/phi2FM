@@ -19,7 +19,7 @@ conda activate esa-phisatnet
 
 cd /lustre/projects/1001/gdaga/home/phi2FM
 export PYTHONPATH=$PYTHONPATH:/lustre/projects/1001/gdaga/home/phi2FM
-python downstreamtraining_script.py -r "args/lustre_expanded/{task}/{config_file}"
+python training_script.py -r "args/lustre_expanded/{task}/{config_file}"
 """
 
 # Configuration
