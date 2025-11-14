@@ -37,5 +37,5 @@ device_ids: [0]
 wandb: True
 patch_size: 224
 shrink_val_set : 0.1
-pad_bands: 8 # 10 for all models, None for phisatnet, 13 for moco and dino
+pad_bands: 8 # 10 for all models, 8 for phisatnet, 13 for moco and dino
 only_get_datasets: False

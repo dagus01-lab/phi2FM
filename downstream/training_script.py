@@ -37,6 +37,7 @@ from models.model_dino_ssl4eo12 import dino_resnet
 
 from pretrain.models.utils_fm import get_phisat2_model
 from downstream.models.phisatnet_downstream import PhiSatNetDownstream
+from downstream.models.model_UNetMyriad2 import UNet_Myriad2_Downstream
 
 from utils import load_data
 from utils import training_loops
@@ -62,7 +63,7 @@ CNN_PRETRAINED_LIST = ['GeoAware_core_nano', 'GeoAware_core_tiny', 'GeoAware_mix
                        'GeoAware_mh_pred_core_nano_classifier', 'seasonal_contrast_classifier',
                        'phileo_precursor', 'phileo_precursor_classifier', 'phisatnet', 'phisatnet_classifier',
                        'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier',
-                       'caco', 'caco_classifier'
+                       'caco', 'caco_classifier', 'unet_myriad2_baseline', 'unet_myriad2_baseline_classifier'
                        ]
 
 VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE_classifier', 'vit_cnn_gc_classifier',
@@ -71,6 +72,7 @@ VIT_CNN_PRETRAINED_LIST = ['prithvi', 'vit_cnn', 'vit_cnn_gc', 'SatMAE', 'SatMAE
 
 MODELS_224 = ['seasonal_contrast', 'resnet_imagenet', 'resnet', 'seasonal_contrast_classifier', 'resnet_imagenet_classifier', 'phisatnet', 'phisatnet_classifier', 
               'moco', 'moco_classifier', 'dino', 'dino_classifier', 'gassl', 'gassl_classifier', 'caco', 'caco_classifier',
+              'unet_myriad2_baseline', 'unet_myriad2_baseline_classifier',
               # "terramind_classifier", "terramind_segmenter"
               ]
 
@@ -287,6 +289,21 @@ def get_models_pretrained(model_name, input_channels, output_channels, input_siz
                                      img_size=input_size,
                                      **core_kwargs
                                     )
+        model(test_input)
+        return model
+
+    if model_name == 'unet_myriad2_baseline' or model_name == 'unet_myriad2_baseline_classifier':
+        print(f'Loading UNet_Myriad2 model with pretrained weights from: {path_model_weights}')
+        model = UNet_Myriad2_Downstream(
+            pretrained_path=path_model_weights,
+            task='segmentation' if model_name == 'unet_myriad2_baseline' else 'classification',
+            input_dim=input_channels,
+            output_dim=output_channels,
+            base_filters=16,
+            depth=3,
+            freeze_body=freeze,
+            img_size=input_size
+        )
         model(test_input)
         return model
 
@@ -1021,13 +1038,12 @@ if __name__ == "__main__":
 
     for n_shot in n_shot_list:
         args.n_shot = n_shot
-        for freeze_pretrained in [False]:
-        #for freeze_pretrained in [True]:
+        for freeze_pretrained in [True, False]:
             args.freeze_pretrained = freeze_pretrained
-            if freeze_pretrained: 
-                prefix="finetuning/"
-            else:
+            if args.freeze_pretrained: 
                 prefix="lp/"
+            else:
+                prefix="finetuning/"
             args.experiment_name = prefix+ base_exp_name
 
             print(f"Running experiment with n_shot: {args.n_shot}, freeze_pretrained: {args.freeze_pretrained}, downstream_task: {args.downstream_task}, model_name: {args.model_name}")

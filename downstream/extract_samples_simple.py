@@ -53,11 +53,11 @@ TASKS = {
     "clouds": {
         "dataset_dir": "/Data/phisatnet_clouds/phisatnet_clouds.zarr",
         "config_file": "args/finetune_FMs/phisatnet_clouds/seco.yml",
-        "output_channels": 2,  # After aggregation: 2 classes (no clouds, clouds)
+        "output_channels": 5,  # After aggregation: 2 classes (no clouds, clouds)
 # 0,1 -> 0 (no clouds)
 # 2,3,4 -> 1 (clouds)
-        "labels": ['No clouds', 'Clouds'], 
-        "classes": ['No clouds', 'Clouds'],  # This will trigger aggregation
+        "labels": ['c1', 'c2', 'c3', 'c4', 'c5'], 
+        "classes": ['c1', 'c2', 'c3', 'c4', 'c5'], #'No clouds', 'Clouds'],  # This will trigger aggregation
         "num_samples": 100
     },
     "worldfloods": {
@@ -609,6 +609,39 @@ def create_binary_comparison_plots(task_name, config, samples_per_plot=10):
     
     print(f"Created {num_plots} binary comparison plots for {task_name}")
 
+def debug_dataset_structure(dl_test, task_name):
+    """
+    Debug function to understand the dataset structure and sample ID mapping.
+    """
+    print(f"\n=== Debugging dataset structure for {task_name} ===")
+    
+    dataset = dl_test.dataset
+    print(f"Dataset type: {type(dataset)}")
+    print(f"Dataset size: {len(dataset)}")
+    
+    # Check for sample ID attributes
+    sample_id_attrs = ['sample_ids', 'ids', 'keys', 'samples', 'file_list']
+    for attr in sample_id_attrs:
+        if hasattr(dataset, attr):
+            attr_value = getattr(dataset, attr)
+            print(f"Found attribute '{attr}': {type(attr_value)}, length: {len(attr_value) if hasattr(attr_value, '__len__') else 'N/A'}")
+            if hasattr(attr_value, '__len__') and len(attr_value) > 0:
+                print(f"  First few values: {attr_value[:5] if len(attr_value) >= 5 else attr_value}")
+    
+    # Check first sample structure
+    if len(dataset) > 0:
+        first_sample = dataset[0]
+        print(f"First sample keys: {list(first_sample.keys()) if isinstance(first_sample, dict) else 'Not a dict'}")
+        
+        # Look for sample ID in the sample itself
+        if isinstance(first_sample, dict):
+            id_keys = ['sample_id', 'id', 'idx', 'key', 'name', 'filename']
+            for key in id_keys:
+                if key in first_sample:
+                    print(f"Found sample ID key '{key}': {first_sample[key]}")
+    
+    print("=" * 50)
+
 def load_dataset(task_name, config, num_samples=5000):
     """
     Load dataset for a specific task using configuration file.
@@ -689,6 +722,9 @@ def extract_samples(task_name, config):
         print(f"Failed to load dataset for {task_name}")
         return
     
+    # Debug dataset structure to understand sample ID mapping
+    debug_dataset_structure(dl_test, task_name)
+    
     # Determine sample indices
     dataset_size = len(dl_test.dataset)
     print(f"Dataset size: {dataset_size}")
@@ -711,13 +747,27 @@ def extract_samples(task_name, config):
             img = sample['img']
             label = sample['label']
             
+            # Try to get the actual sample ID from the dataset
+            # This depends on how the dataset is structured
+            actual_sample_id = None
+            if hasattr(dl_test.dataset, 'sample_ids') and sample_idx < len(dl_test.dataset.sample_ids):
+                actual_sample_id = dl_test.dataset.sample_ids[sample_idx]
+            elif 'sample_id' in sample:
+                actual_sample_id = sample['sample_id']
+            elif hasattr(dl_test.dataset, 'ids') and sample_idx < len(dl_test.dataset.ids):
+                actual_sample_id = dl_test.dataset.ids[sample_idx]
+            else:
+                # Fallback to dataset index if no actual ID is available
+                actual_sample_id = sample_idx
+                print(f"Warning: Could not find actual sample ID for index {sample_idx}, using index as ID")
+            
             # Process image for RGB visualization
             rgb_img = preprocess_image_for_rgb(img)
             
             if rgb_img is not None:
                 # Convert to 8-bit and save as PNG
                 img_8bit = (rgb_img * 255).astype(np.uint8)
-                img_filename = f"{task_name}_sample_{sample_idx:05d}.png"
+                img_filename = f"{task_name}_sample_{actual_sample_id:05d}.png"
                 img_path = img_dir / img_filename
                 cv2.imwrite(str(img_path), cv2.cvtColor(img_8bit, cv2.COLOR_RGB2BGR))
             
@@ -730,9 +780,13 @@ def extract_samples(task_name, config):
             )
             
             # Save label as numpy array
-            label_filename = f"{task_name}_sample_{sample_idx:05d}.npy"
+            label_filename = f"{task_name}_sample_{actual_sample_id:05d}.npy"
             label_path = label_dir / label_filename
             np.save(str(label_path), onehot_label)
+            
+            # Debug: Print first few actual vs index IDs
+            if i < 5:
+                print(f"Sample index {sample_idx} -> Actual ID {actual_sample_id}")
             
             successful_extractions += 1
             
