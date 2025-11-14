@@ -18,16 +18,11 @@ LUSTRE_BASE = "/lustre/projects/1001/gdaga/home"
 PATH_MAPPINGS = {
     "/Data/worldfloods/worldfloods.zarr": f"{LUSTRE_BASE}/worldfloods.zarr",
     "/Data/phisatnet_dataset/phileo-bench_roads.zarr": f"{LUSTRE_BASE}/phileo-bench_roads.zarr",
-    "/Data/phisatnet/phileo-bench_lc.zarr": f"{LUSTRE_BASE}/phileo-bench_lc.zarr",
     "/Data/phisatnet_clouds.zarr": f"{LUSTRE_BASE}/phisatnet_clouds.zarr",
-    "/Data/lpl_burned_area/burned.zarr": f"{LUSTRE_BASE}/lpl_burned_area.zarr",
     "/Data/burned_area.zarr": f"{LUSTRE_BASE}/burned_area.zarr",
-    "/Data/anomaly_detection/marine_area_dataset.zarr": f"{LUSTRE_BASE}/anomaly_detection.zarr",
     "/Data/anomaly_detection.zarr": f"{LUSTRE_BASE}/anomaly_detection.zarr",
-    "/Data/fire_dataset/fire_dataset.zarr": f"{LUSTRE_BASE}/fire.zarr",
     "/Data/fire.zarr": f"{LUSTRE_BASE}/fire.zarr",
     "/home/gdaga/pretrained_weights/": f"{LUSTRE_BASE}/pretrained_weights/",
-    "/home/gdaga/hydranet/experiments/distillation_production_20251113_001051/baseline/config_baseline/best_downstream_model.pt": f"{LUSTRE_BASE}/pretrained_weights/unet_myriad2_baseline.pt",
     "/Data/phi2FM_n_shot": f"{LUSTRE_BASE}/phi2FM_models",
     "/Data/phi2FM_models": f"{LUSTRE_BASE}/phi2FM_models",
 }
@@ -58,7 +53,7 @@ def copy_and_update_configs():
     
     # Task directories to copy
     tasks = ["anomaly_detection", "fire", "lpl_burned_area", 
-             "phisatnet_clouds", "roads", "worldfloods", "phileo_bench-lc"]
+             "phisatnet_clouds", "roads", "worldfloods"]
     
     total_copied = 0
     

@@ -12,14 +12,14 @@ PBS_TEMPLATE = """#!/bin/bash
 #PBS -N {job_name}
 #PBS -q {queue}
 #PBS -l walltime={walltime}
-#PBS -l select=1:ngpus=4:ncpus=96:mem=739g
+#PBS -l select=1:ngpus=4:ncpus=30:mem=200g
 
 source /lustre/projects/1001/miniconda3/bin/activate
 conda activate esa-phisatnet
 
-cd /lustre/projects/1001/gdaga/home/phi2FM/downstream
-
-python training_script.py -r "args/lustre_expanded/{task}/{config_file}"
+cd /lustre/projects/1001/gdaga/home/phi2FM
+export PYTHONPATH=$PYTHONPATH:/lustre/projects/1001/gdaga/home/phi2FM
+python downstreamtraining_script.py -r "args/lustre_expanded/{task}/{config_file}"
 """
 
 # Configuration
