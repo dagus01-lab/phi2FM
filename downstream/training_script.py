@@ -1030,11 +1030,10 @@ if __name__ == "__main__":
     base_exp_name = args.experiment_name
 
     wandb_run = None
-    if args.wandb:
+    if hasattr(args, "wandb") and args.wandb:
         wandb.login()
         wandb_run = wandb.init(project="esa-phi-sat2", name=args.experiment_name, config=args)
-
-    args.update({"wandb_run": wandb_run})
+        args.update({"wandb_run": wandb_run})
 
     for n_shot in n_shot_list:
         args.n_shot = n_shot
