@@ -580,10 +580,11 @@ def main(experiment_name,
          only_get_datasets,
          pad_bands,
          min_lr,
-         patch_size,
-         wandb,
-         wandb_run,
-         shrink_val_set):
+         patch_size=224,
+         wandb_run="esa-phisat2",
+         shrink_val_set=0.1,
+         wandb=False,
+):
     """ 
     main script for PhilEO Bench. Used to run model training experiments with randomly initialized and pre-trained models on a number of downstream tasks. 
     The script handles dataset creation (based on data protocol options selected), data preprocessing (based on downstream task & model type) & model, training, validation and testing. 
@@ -1031,6 +1032,7 @@ if __name__ == "__main__":
 
     wandb_run = None
     if hasattr(args, "wandb") and args.wandb:
+        args.wandb = False
         wandb.login()
         wandb_run = wandb.init(project="esa-phi-sat2", name=args.experiment_name, config=args)
         args.update({"wandb_run": wandb_run})
