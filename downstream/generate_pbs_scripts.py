@@ -33,7 +33,7 @@ TASKS = {
     "anomaly_detection": "AD"
 }
 
-def generate_pbs_scripts(queue="gpu4_dbg", walltime="00:05:00"):
+def generate_pbs_scripts(queue="gpu4_std", walltime="00:05:00"):
     """Generate PBS scripts for all expanded configuration files."""
     
     pbs_dir = Path("pbs_scripts_expanded")
@@ -103,8 +103,8 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Generate PBS job scripts for expanded configs")
-    parser.add_argument("--queue", default="gpu4_dbg", 
-                       help="PBS queue (default: gpu4_dbg)")
+    parser.add_argument("--queue", default="gpu4_std", 
+                       help="PBS queue (default: gpu4_std)")
     parser.add_argument("--walltime", default="00:05:00",
                        help="Wall time (default: 00:05:00)")
     

@@ -1,6 +1,6 @@
 #!/bin/bash
 #PBS -N AD_dino_n5000_f
-#PBS -q gpu4_dbg
+#PBS -q gpu4_std
 #PBS -l walltime=00:05:00
 #PBS -l select=1:ngpus=4:ncpus=30:mem=200g
 
