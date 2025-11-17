@@ -23,7 +23,7 @@ split_ratio: null
 regions: null
 vis_val: true
 warmup: true
-warmp_steps: 5
+warmup_steps: 5
 warmup_gamma: 10
 min_lr: null
 pretrained_model_path: /lustre/projects/1001/gdaga/home/pretrained_weights/CoreEncoderMultiHead_geo_pred_best.pt

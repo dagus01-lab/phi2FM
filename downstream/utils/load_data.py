@@ -240,9 +240,9 @@ def callback_preprocess_satmae(x, y):
     x_norm = sentinelNormalize(x)
     y = y.astype(np.float32, copy=False)
 
-    x_norm = x_norm[16:-16, 16:-16, :]
+    x_norm = x_norm #[16:-16, 16:-16, :]
     if len(y.shape) > 2:
-        y = y[16:-16, 16:-16, :]
+        y = y #[16:-16, 16:-16, :]
     return x_norm, y
 
 
@@ -288,8 +288,8 @@ def callback_preprocess_landcover_satmae(x, y):
     u,inv = np.unique(y,return_inverse = True)
     y = np.array([LC_MAP[x] for x in u])[inv].reshape(y.shape)
 
-    x_norm = x_norm[16:-16, 16:-16, :]
-    y = y[16:-16, 16:-16, :]
+    x_norm = x_norm #[16:-16, 16:-16, :]
+    y = y #[16:-16, 16:-16, :]
     return x_norm, y
 
 
@@ -501,10 +501,10 @@ def callback_decoder_satmae_fire(x, y):
     x_norm = minmax_normalize_image(x) #sentinelNormalize(x)
     y = y.astype(np.float32, copy=False)
     x_norm = beo.channel_last_to_first(x_norm)
-    x_norm = x_norm[:, 80:-80, 80:-80]
+    x_norm = x_norm[:, 64:-64, 64:-64]
     #x_norm = x_norm[16:-16, 16:-16, :]
     if len(y.shape) > 2:
-        y = y[:, 80:-80, 80:-80]
+        y = y[:, 64:-64, 64:-64]
     return torch.from_numpy(x_norm), torch.from_numpy(np.array(y)) #x_norm, y
 def callback_decoder_satmae_burned_area(x, y):
     x = pad_bands(x)
@@ -512,12 +512,12 @@ def callback_decoder_satmae_burned_area(x, y):
     #x_norm = sentinelNormalize(x)
     y = y.astype(np.float32, copy=False)
     x_norm = beo.channel_last_to_first(x_norm)
-    x_norm = x_norm[:, 80:-80, 80:-80]
+    x_norm = x_norm[:, 64:-64, 64:-64]
     #x_norm = x_norm[16:-16, 16:-16, :]
     if y.ndim > 2:
         y = beo.channel_last_to_first(y)
     if len(y.shape) > 2:
-        y = y[:, 80:-80, 80:-80]
+        y = y[:, 64:-64, 64:-64]
     return torch.from_numpy(x_norm), torch.from_numpy(np.array(y)) #x_norm, y
 
 def callback_decoder_satmae_clouds(x, y):
@@ -533,12 +533,12 @@ def callback_decoder_satmae_clouds(x, y):
     y = y.astype(np.float32, copy=False)
     x = beo.channel_last_to_first(x)
     x_norm = x #normalize_clouds(x) # minmax_normalize_image(x) #(x-CLOUDS_MEAN)/CLOUDS_STD 
-    x_norm = x_norm[:, 80:-80, 80:-80]
+    x_norm = x_norm[:, 64:-64, 64:-64]
     print(f"[SATMAE] x shape after cropping: {x_norm.shape}")
     #x_norm = x_norm[16:-16, 16:-16, :]
     if y.ndim > 2:
         y = beo.channel_last_to_first(y)
-        y = y[:, 80:-80, 80:-80]
+        y = y[:, 64:-64, 64:-64]
     #if len(y.shape) > 2:
     #    y = y[16:-16, 16:-16, :]
     return torch.from_numpy(x_norm), torch.from_numpy(np.array(y))
@@ -549,7 +549,7 @@ def callback_decoder_satmae_worldfloods(x, y):
     #x_norm = sentinelNormalize(x)
     y = y.astype(np.float32, copy=False)
     x = beo.channel_last_to_first(x)
-    x = x[:, 80:-80, 80:-80]
+    x = x[:, 64:-64, 64:-64]
     #x_norm = x_norm[16:-16, 16:-16, :]
     if y.ndim > 2:
         y = beo.channel_last_to_first(y)
@@ -585,22 +585,22 @@ def callback_decoder_prithvi_clouds(x, y):
     x_norm = normalize_clouds(x) #minmax_normalize_image(x) #(x-CLOUDS_MEAN)/CLOUDS_STD
     x_norm = beo.channel_first_to_last(x_norm)
     x_norm, y =  callback_decoder_prithvi(x_norm, y)
-    x_norm = x_norm[:, 16:-16, 16:-16]
-    y = y[:, 16:-16, 16:-16]
+    x_norm = x_norm #[:, 16:-16, 16:-16]
+    y = y #[:, 16:-16, 16:-16]
     return x_norm, y
 
 def callback_decoder_prithvi_worldfloods(x, y):
     x = pad_bands(x)
     x, y =  callback_decoder_prithvi(x, y)
-    x = x[:, 16:-16, 16:-16]
-    y = y[:, 16:-16, 16:-16]
+    x = x #[:, 16:-16, 16:-16]
+    y = y #[:, 16:-16, 16:-16]
     return x, y
 
 def callback_decoder_prithvi_burned_area(x, y):
     x = pad_bands(x)
     x, y =  callback_decoder_prithvi(x, y)
-    x = x[:, 16:-16, 16:-16]
-    y = y[:, 16:-16, 16:-16]
+    x = x #[:, 16:-16, 16:-16]
+    y = y #[:, 16:-16, 16:-16]
     return x, y
 
 def callback_preprocess_phisatnet_burned_area(x, y):

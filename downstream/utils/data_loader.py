@@ -85,7 +85,7 @@ class AugmentationMirrorXY:
 
         return img.copy(), label.copy()
 class AugmentationNoiseNormal:
-    def __init__(self, p=0.15, std=0.02, inplace=False):
+    def __init__(self, p=0.08, std=0.02, inplace=False):
         self.p = p
         self.std = std
         self.inplace = inplace
