@@ -581,7 +581,7 @@ def main(experiment_name,
          pad_bands,
          min_lr,
          patch_size=224,
-         wandb_run="esa-phisat2",
+         wandb_run=None,
          shrink_val_set=0.1,
          wandb=False,
 ):
@@ -1035,9 +1035,9 @@ if __name__ == "__main__":
     wandb_run = None
     if hasattr(args, "wandb") and args.wandb:
         args.wandb = False
-        wandb.login()
-        wandb_run = wandb.init(project="esa-phi-sat2", name=args.experiment_name, config=args)
-        args.update({"wandb_run": wandb_run})
+        # wandb.login()
+        # wandb_run = wandb.init(project="esa-phi-sat2", name=args.experiment_name, config=args)
+        # args.update({"wandb_run": wandb_run})
 
     for n_shot in n_shot_list:
         args.n_shot = n_shot
