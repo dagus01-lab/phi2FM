@@ -57,7 +57,9 @@ def expand_config(config_path):
         new_config = config.copy()
         new_config['n_shot'] = n_shot_val
         new_config['freeze_pretrained'] = freeze_val
-        
+        if 'warmp_steps' in new_config:
+            new_config['warmup_steps'] = new_config['warmp_steps']
+            del new_config['warmup_steps']  # Remove warmup_steps if present
         # Update experiment name to include n_shot and freeze info
         if 'experiment_name' in new_config:
             base_name = new_config['experiment_name']
