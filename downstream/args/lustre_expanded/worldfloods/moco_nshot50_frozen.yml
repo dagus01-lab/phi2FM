@@ -37,5 +37,5 @@ device_ids:
 pad_bands: 13
 only_get_datasets: false
 wandb: true
-patch_size: 256
+patch_size: 224
 shrink_val_set: 0.1

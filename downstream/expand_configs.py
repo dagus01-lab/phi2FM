@@ -59,7 +59,8 @@ def expand_config(config_path):
         new_config['freeze_pretrained'] = freeze_val
         if 'warmp_steps' in new_config:
             new_config['warmup_steps'] = new_config['warmp_steps']
-            del new_config['warmup_steps']  # Remove warmup_steps if present
+            del new_config['warmp_steps']  # Remove warmp_steps if present
+        new_config['patch_size'] = 224  # Ensure patch_size is set to 224
         # Update experiment name to include n_shot and freeze info
         if 'experiment_name' in new_config:
             base_name = new_config['experiment_name']

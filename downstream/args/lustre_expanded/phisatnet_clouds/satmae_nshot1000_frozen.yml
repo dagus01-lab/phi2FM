@@ -36,3 +36,4 @@ device_ids:
 - 0
 pad_bands: 10
 only_get_datasets: false
+patch_size: 224
