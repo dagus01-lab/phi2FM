@@ -162,7 +162,7 @@ def get_trainer(model_name, downstream_task, epochs, lr, model, device, lr_sched
                                                            save_info_vars=save_info_vars, weights=weights, pos_weight=pos_weight, wandb_run=wandb_run)
         elif downstream_task == 'anomaly_detection':
             trainer = training_loops.TrainAnomalyDetection(epochs=epochs, lr=lr, model=model, device=device,
-                                                           lr_scheduler=lr_scheduler, warmup=warmup, early_stop=early_stop,
+                                                           lr_scheduler=lr_scheduler, early_stop=early_stop,
                                                            train_loader=dl_train,
                                                            val_loader=dl_val, test_loader=dl_test, inference_loader=dl_inference, name=NAME,
                                                            out_folder=OUTPUT_FOLDER, visualise_validation=vis_val,
