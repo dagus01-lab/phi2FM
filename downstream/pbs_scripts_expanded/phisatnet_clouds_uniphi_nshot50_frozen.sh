@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N CLD_unip_n50_f
 #PBS -q gpu4_std
-#PBS -l walltime=00:05:00
+#PBS -l walltime=23:00:00
 #PBS -l select=1:ngpus=4:ncpus=30:mem=200g
 
 source /lustre/projects/1001/miniconda3/bin/activate
