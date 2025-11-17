@@ -834,6 +834,8 @@ def main(experiment_name,
 
     # Create dataloaders
     print(f'Batch size: {batch_size}')
+    if not hasattr(args, 'patch_size'):
+        args.patch_size = 224
     patch_size = (args.patch_size, args.patch_size)
     weights, pos_weight, dl_train, dl_val, dl_test, dl_inference = load_data.load_data(
         dataset_folder,
