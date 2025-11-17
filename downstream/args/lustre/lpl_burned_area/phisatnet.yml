@@ -20,6 +20,12 @@ vis_val: true
 warmup: true
 warmup_steps: 5
 warmup_gamma: 10
+n_shot:
+- 50
+- 100
+- 500
+- 1000
+- 5000
 min_lr: null
 pretrained_model_path: /lustre/projects/1001/gdaga/home/pretrained_weights/phisat2net_geoaware_best.pt
 freeze_pretrained: true
@@ -30,7 +36,7 @@ train_mode: train_test
 downstream_model_path: null
 data_path_inference_128: /lustre/projects/1001/gdaga/home/lpl_burned_area.zarr
 data_path_inference_224: /lustre/projects/1001/gdaga/home/lpl_burned_area.zarr
-output_path: /Data/phisatnet_new_decoder_last_relu
+output_path: /lustre/projects/1001/gdaga/home/phisatnet_new_decoder_last_relu
 data_parallel: false
 device_ids:
 - 0

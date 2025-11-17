@@ -61,12 +61,17 @@ def expand_config(config_path):
             new_config['warmup_steps'] = new_config['warmp_steps']
             del new_config['warmp_steps']  # Remove warmp_steps if present
         new_config['patch_size'] = 224  # Ensure patch_size is set to 224
+        # new_config['input_size'] = 224  # Ensure input_size is set to 224
         # Update experiment name to include n_shot and freeze info
         if 'experiment_name' in new_config:
             base_name = new_config['experiment_name']
             freeze_suffix = "frozen" if freeze_val else "unfrozen"
             new_config['experiment_name'] = f"{base_name}_nshot{n_shot_val}_{freeze_suffix}"
         
+        for key in new_config.keys():
+            if "path" in key:
+                if isinstance(new_config[key], str) and "/Data" in new_config[key]:
+                    new_config[key] = new_config[key].replace("/Data", "/lustre/projects/1001/gdaga/home")
         # Create suffix for filename
         freeze_suffix = "frozen" if freeze_val else "unfrozen"
         suffix = f"_nshot{n_shot_val}_{freeze_suffix}"

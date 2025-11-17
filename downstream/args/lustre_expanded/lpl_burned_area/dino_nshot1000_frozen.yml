@@ -23,7 +23,7 @@ warmup_gamma: 10
 min_lr: null
 pretrained_model_path: /lustre/projects/1001/gdaga/home/pretrained_weights/B13_rn50_dino_0099.pth
 freeze_pretrained: true
-data_path_128_10m: /Data/tmux ls/burned.zarr
+data_path_128_10m: /lustre/projects/1001/gdaga/home/tmux ls/burned.zarr
 data_path_224_10m: /lustre/projects/1001/gdaga/home/lpl_burned_area.zarr
 data_path_224_30m: /lustre/projects/1001/gdaga/home/lpl_burned_area.zarr
 train_mode: train_test
